@@ -1,0 +1,37 @@
+/* Tailwind entry + design variables */
+@import "tailwindcss/preflight";
+@tailwind utilities;
+
+:root {
+  /* Colors */
+  --color-primary: #1A7CFF;
+  --color-primary-hover: #0D6EF5;
+  --color-primary-active: #0558CC;
+  --color-primary-light: rgba(26,124,255,0.1);
+  --color-secondary: #18E2FF;
+  --color-accent: #A24BFF;
+
+  --bg-deep: #000913;
+  --bg-elevated: #031B2F;
+  --card-bg: #0A2540;
+
+  --text-primary: #F4F8FF;
+  --text-secondary: #9FB2C8;
+  --text-tertiary: #5A7089;
+
+  --glass: rgba(255,255,255,0.05);
+  --border-subtle: rgba(255,255,255,0.08);
+  --border-bright: rgba(26,124,255,0.3);
+}
+
+/* small helper classes for consistent components */
+.btn-base{display:inline-flex;align-items:center;justify-content:center;border-radius:16px;font-weight:600}
+.btn-lg{height:56px;padding-left:24px;padding-right:24px}
+.btn-regular{height:48px;padding-left:20px;padding-right:20px}
+.btn-sm{height:40px;padding-left:16px;padding-right:16px}
+
+.card-standard{background:var(--card-bg);border:1px solid var(--border-subtle);border-radius:24px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.3)}
+.card-glass{background:linear-gradient(135deg, rgba(26,124,255,0.1) 0%, rgba(162,75,255,0.05) 100%);backdrop-filter:blur(20px) saturate(180%);border-radius:24px;padding:24px;border:1px solid rgba(255,255,255,0.1)}
+
+.primary-gradient{background-image:linear-gradient(135deg,#1A7CFF 0%,#A24BFF 100%)}
+.glow-gradient{background-image:linear-gradient(135deg,#18E2FF 0%,#1A7CFF 50%,#A24BFF 100%)}
