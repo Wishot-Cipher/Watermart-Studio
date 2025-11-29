@@ -170,9 +170,10 @@ export async function renderWatermark(
 
         // Global safety cap: prevent exported images from being excessively large
         // (some users report very large downloads from HD/Ultra upscaling). This
-        // enforces an upper bound while preserving aspect ratio.
-        // Global safety cap: match common online editors like Canva — keep downloads reasonable
-        const GLOBAL_MAX_EXPORT_DIMENSION = 2048; // px - cap export largest dimension
+        // enforces an upper bound while preserving aspect ratio. Use a lower cap
+        // on mobile devices to avoid high CPU / memory usage.
+        const isMobile = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+        const GLOBAL_MAX_EXPORT_DIMENSION = isMobile ? 1200 : 1600; // px - cap export largest dimension
         const finalLargest = Math.max(width, height);
         if (finalLargest > GLOBAL_MAX_EXPORT_DIMENSION) {
           const gscale = GLOBAL_MAX_EXPORT_DIMENSION / finalLargest;
@@ -223,7 +224,8 @@ export async function renderWatermark(
         try {
           if (qualityKey === 'hd' || qualityKey === 'ultra') {
             // Use gentler sharpen levels to avoid over-brightening on exported images
-            const sharpenLevel = qualityKey === 'ultra' ? 0.16 : 0.08;
+            // Reduced further for better UX on lower-powered devices.
+            const sharpenLevel = qualityKey === 'ultra' ? 0.12 : 0.06;
             applyFinalSharpen(ctx, canvas, sharpenLevel);
           }
         } catch (err) {
@@ -290,8 +292,8 @@ function applyFinalSharpen(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElem
       const bdata = blurredImageData.data;
       // high-pass sharpen (unsharp mask): add (orig - blurred) * amount
       // Use a conservative multiplier so we don't push highlights too far.
-      // Reduced from 0.9 -> 0.6 to make the high-pass contribution milder.
-      const hpAmount = Math.min(1.0, amount * 0.6);
+      // Reduced from previous values to make the high-pass contribution milder.
+      const hpAmount = Math.min(1.0, amount * 0.45);
       for (let i = 0; i < data.length; i += 4) {
         data[i] = Math.min(255, Math.max(0, data[i] + (data[i] - bdata[i]) * hpAmount));
         data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + (data[i + 1] - bdata[i + 1]) * hpAmount));

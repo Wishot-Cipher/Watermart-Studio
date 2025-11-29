@@ -387,6 +387,7 @@ export default function EditorPage() {
     }
 
     let cancelled = false;
+    let lastUrl: string | null = null;
     const id = setTimeout(async () => {
       try {
         const cfg = buildConfig({ text: '', logos: [] });
@@ -399,18 +400,44 @@ export default function EditorPage() {
         else qualityParam = 'hd';
 
         const dataUrl = await renderWatermark(current.url, cfg, adj, faceModelRef.current, undefined, qualityParam);
-        if (!cancelled) setPreviewDataUrl(dataUrl);
+        if (!cancelled) {
+          try {
+            // Revoke previous preview blob URL to avoid accumulating memory
+            if (lastUrl && lastUrl.startsWith('blob:')) URL.revokeObjectURL(lastUrl);
+          } catch (err) {
+            console.debug('revoking previous preview URL failed', err);
+          }
+          lastUrl = dataUrl;
+          setPreviewDataUrl(dataUrl);
+        }
       } catch (err) {
         console.warn('Preview render failed', err);
       }
     }, 350);
 
-    return () => { cancelled = true; clearTimeout(id); };
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+      try { if (lastUrl && lastUrl.startsWith('blob:')) URL.revokeObjectURL(lastUrl); } catch (err) { console.debug('revoking preview URL failed', err); }
+    };
   }, [current, activeTab, exposure, contrast, saturation, temperature, highlights, shadows, whites, blacks, vibrance, clarity, dehaze, vignette, grain, sharpen, tint, hue, filterPreset, buildConfig, buildAdjustments, useEnginePreview, previewQuality]);
 
+  // Lazy-load face model only when AI placement is enabled to avoid loading heavy TFJS code eagerly
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (!aiPlacement) {
+        // If user disabled AI placement, dispose model to free memory
+        try {
+          const m = (faceModelRef.current as unknown) as { dispose?: () => void } | null;
+          if (m && typeof m.dispose === 'function') m.dispose();
+        } catch (err) {
+          console.debug('disposing face model failed', err);
+        }
+        faceModelRef.current = null;
+        return;
+      }
+
       try {
         const model = await blazeface.load();
         if (!cancelled) faceModelRef.current = model;
@@ -419,7 +446,7 @@ export default function EditorPage() {
       }
     })();
     return () => { cancelled = true };
-  }, []);
+  }, [aiPlacement]);
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-[#000913]">
