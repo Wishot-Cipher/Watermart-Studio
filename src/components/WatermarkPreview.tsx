@@ -39,6 +39,7 @@ type Props = {
   opacity: number
   strokeWidth?: number
   strokeColor?: string
+  flushRef?: React.MutableRefObject<(() => void) | null>
 }
 
 // Professional style mappings
@@ -125,6 +126,7 @@ export default function WatermarkPreview(props: Props) {
     watermarkType, 
     watermarkText, 
     logos,
+    setLogos,
     previewImgWidth, 
     size, 
     watermarkColor, 
@@ -144,6 +146,7 @@ export default function WatermarkPreview(props: Props) {
     rotation,
     strokeWidth,
     strokeColor
+    , flushRef
   } = props
 
   useEffect(() => {
@@ -194,6 +197,57 @@ export default function WatermarkPreview(props: Props) {
     
     return undefined
   }
+
+  // Throttle pointer move updates via requestAnimationFrame to avoid flooding React state on mobile
+  const rafRef = React.useRef<number | null>(null);
+  const lastPosRef = React.useRef<{ x: number; y: number } | null>(null);
+
+  const flushPointerPosition = () => {
+    if (!lastPosRef.current) return;
+    const { x, y } = lastPosRef.current;
+    setCustomPos({ x, y });
+    lastPosRef.current = null;
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+  };
+
+  // Expose a flush function so parent can request committing any pending visual-only positions
+  React.useEffect(() => {
+    if (!flushRef) return;
+    flushRef.current = () => {
+      // flush last pointer pos for watermark
+      try {
+        if (lastPosRef.current) {
+          const { x, y } = lastPosRef.current;
+          setCustomPos({ x, y });
+          lastPosRef.current = null;
+          if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+        }
+      } catch (err) { console.debug('flush pointer failed', err); }
+
+      // Also compute logo positions from DOM to commit any immediate-follow updates
+      try {
+        const container = containerRef?.current;
+        if (!container) return;
+        const rect = container.getBoundingClientRect();
+        const els = Array.from(container.querySelectorAll<HTMLElement>('.wm-logo-draggable'));
+        if (!els || els.length === 0) return;
+        const next = (logos || []).map((item, idx) => {
+          const el = els[idx];
+          if (!el) return item;
+          const elRect = el.getBoundingClientRect();
+          const cx = elRect.left + elRect.width / 2;
+          const cy = elRect.top + elRect.height / 2;
+          const x = Math.max(0, Math.min(1, (cx - rect.left) / rect.width));
+          const y = Math.max(0, Math.min(1, (cy - rect.top) / rect.height));
+          return { ...item, position: { x, y } };
+        });
+        if (setLogos) setLogos(next);
+      } catch (err) {
+        console.debug('flush logos failed', err);
+      }
+    };
+    return () => { if (flushRef) flushRef.current = null; };
+  }, [flushRef, containerRef, logos, setCustomPos, setLogos]);
 
   const handlePointerUp = (e: React.PointerEvent) => {
     setIsDragging(false)
@@ -259,36 +313,52 @@ export default function WatermarkPreview(props: Props) {
       {watermarkType !== 'none' && (
         <motion.div 
           initial={{ opacity: 0 }} 
-          animate={{ opacity: opacity / 100 }} 
-          exit={{ opacity: 0 }}
+            animate={{ opacity: opacity / 100 }} 
+            exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className={`absolute ${position === 'custom' ? '' : currentPosition} z-30 pointer-events-auto cursor-grab active:cursor-grabbing select-none`}
-          onPointerDown={(e) => {
-            setIsDragging(true)
-            try { 
-              (e.currentTarget as Element).setPointerCapture(e.pointerId) 
-            } catch (err) { 
-              console.debug('setPointerCapture failed', err) 
-            }
-          }} 
-          onPointerMove={(e) => {
-            if (!isDragging) return
-            const rect = containerRef.current?.getBoundingClientRect()
-            if (!rect) return
-            const xPct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-            const yPct = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
-            setCustomPos({ x: xPct, y: yPct })
-          }} 
-          onPointerUp={handlePointerUp}
-          style={{ 
-            mixBlendMode: (blendMode as any),
-            filter: glowEffect ? 'drop-shadow(0 0 25px rgba(26,124,255,0.8))' : 'none', 
-            left: position === 'custom' && customPos ? `${customPos.x * 100}%` : undefined, 
-            top: position === 'custom' && customPos ? `${customPos.y * 100}%` : undefined, 
-            transform: `${position === 'custom' && customPos ? 'translate(-50%,-50%) ' : ''}rotate(${rotation}deg)`,
-            transformOrigin: 'center center',
-            pointerEvents: 'auto'
-          }}
+            className={`absolute ${position === 'custom' ? '' : currentPosition} z-30 pointer-events-auto cursor-grab active:cursor-grabbing select-none`}
+            onPointerDown={(e) => {
+              setIsDragging(true)
+              try { 
+                (e.currentTarget as Element).setPointerCapture(e.pointerId) 
+              } catch (err) { 
+                console.debug('setPointerCapture failed', err) 
+              }
+            }}
+            onPointerMove={(e) => {
+              if (!isDragging) return
+              const rect = containerRef.current?.getBoundingClientRect()
+              if (!rect) return
+              const xPct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+              const yPct = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
+              lastPosRef.current = { x: xPct, y: yPct };
+              // Immediate visual feedback: update element position directly so it follows touch immediately
+              try {
+                const el = e.currentTarget as HTMLElement;
+                el.style.left = `${xPct * 100}%`;
+                el.style.top = `${yPct * 100}%`;
+                // keep translate for centering while dragging
+                el.style.transform = `translate(-50%,-50%) rotate(${rotation}deg)`;
+              } catch (err) {
+                console.debug('watermark dom update failed', err);
+              }
+              if (!rafRef.current) {
+                rafRef.current = requestAnimationFrame(() => {
+                  flushPointerPosition();
+                });
+              }
+            }}
+            onPointerUp={handlePointerUp}
+            style={{ 
+              mixBlendMode: (blendMode as any),
+              filter: glowEffect ? 'drop-shadow(0 0 25px rgba(26,124,255,0.8))' : 'none', 
+              left: position === 'custom' && customPos ? `${customPos.x * 100}%` : undefined, 
+              top: position === 'custom' && customPos ? `${customPos.y * 100}%` : undefined, 
+              transform: `${position === 'custom' && customPos ? 'translate(-50%,-50%) ' : ''}rotate(${rotation}deg)`,
+              transformOrigin: 'center center',
+              pointerEvents: 'auto',
+              touchAction: 'none'
+            }}
         >
           <div 
             className={`${styleConfig.bg} ${styleConfig.border} ${styleConfig.radius} ${styleConfig.padding} transition-all duration-200`}
@@ -327,16 +397,17 @@ export default function WatermarkPreview(props: Props) {
             const left = `${(l.position?.x ?? 0.9) * 100}%`;
             const top = `${(l.position?.y ?? 0.9) * 100}%`;
             return (
-              <div
-                key={l.id || i}
-                className="absolute z-50 cursor-grab active:cursor-grabbing"
-                style={{
-                  width: sizePx,
-                  height: sizePx,
-                  left,
-                  top,
-                  transform: 'translate(-50%,-50%)'
-                }}
+                <div
+                  key={l.id || i}
+                  data-index={i}
+                  className="wm-logo-draggable absolute z-50 cursor-grab active:cursor-grabbing"
+                  style={{
+                    width: sizePx,
+                    height: sizePx,
+                    left,
+                    top,
+                    transform: 'translate(-50%,-50%)'
+                  }}
                 onPointerDown={(e) => {
                   const setLogos = props.setLogos;
                   if (!setLogos) return;
@@ -344,20 +415,51 @@ export default function WatermarkPreview(props: Props) {
                   try { (e.currentTarget as Element).setPointerCapture(pid); } catch (err) { console.debug('setPointerCapture', err); }
                   const rect = props.containerRef.current?.getBoundingClientRect();
                   if (!rect) return;
-                  const move = (ev: PointerEvent) => {
-                    const xPct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-                    const yPct = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
-                    const next = (logos || []).map((item, idx) => idx === i ? { ...item, position: { x: xPct, y: yPct } } : item);
-                    setLogos(next);
-                  };
+                    // Throttle logo move updates with requestAnimationFrame and apply immediate DOM transforms
+                    let rafId: number | null = null;
+                    let lastPos: { x: number; y: number } | null = null;
+                    const logoEl = e.currentTarget as HTMLElement;
+                    // ensure touch action is disabled so finger drag is not interrupted
+                    try { logoEl.style.touchAction = 'none'; } catch (err) { console.debug('set touchAction failed', err); }
+                    const move = (ev: PointerEvent) => {
+                      const x = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+                      const y = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
+                      lastPos = { x, y };
+                      // Immediate visual follow
+                      try {
+                        logoEl.style.left = `${x * 100}%`;
+                        logoEl.style.top = `${y * 100}%`;
+                        logoEl.style.transform = 'translate(-50%,-50%)';
+                      } catch (err) { console.debug('logo dom update failed', err); }
+                      if (rafId == null) {
+                        rafId = requestAnimationFrame(() => {
+                          if (!lastPos) return;
+                          const { x, y } = lastPos;
+                          const next = (logos || []).map((item, idx) => idx === i ? { ...item, position: { x, y } } : item);
+                          setLogos(next);
+                          lastPos = null;
+                          if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+                        });
+                      }
+                    };
                   const up = () => {
                     try { (e.currentTarget as Element).releasePointerCapture(pid); } catch (err) { console.debug('releasePointerCapture', err); }
-                    window.removeEventListener('pointermove', move);
-                    window.removeEventListener('pointerup', up);
+                      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+                      // commit final position if any
+                      if (lastPos) {
+                        const { x, y } = lastPos;
+                        const next = (logos || []).map((item, idx) => idx === i ? { ...item, position: { x, y } } : item);
+                        setLogos(next);
+                        lastPos = null;
+                      }
+                      window.removeEventListener('pointermove', move);
+                      window.removeEventListener('pointerup', up);
                   };
                   window.addEventListener('pointermove', move);
                   window.addEventListener('pointerup', up);
                 }}
+                // Prevent touch scrolling while dragging logos
+                // and ensure touch interactions are captured
               >
                 <img src={l.dataUrl} alt={`logo-${i}`} className="object-contain w-full h-full" style={{ display: 'block' }} />
                 <div className="absolute -top-2 -right-2 bg-black/70 text-white text-[10px] px-1 rounded-md border border-white/20">{sizePx}px</div>

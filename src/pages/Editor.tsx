@@ -23,14 +23,15 @@ import {
   Save,
   Palette,
   Sun,
- 
   Scissors,
+  X
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useImages } from '@/contexts/ImagesContext';
 import ModernWatermarkControlsWrapper from '@/components/ModernWatermarkControlsWrapper';
 import WatermarkPreview from '@/components/WatermarkPreview';
 import { renderWatermark } from '@/utils/watermarkEngine';
+import { getFilterString } from '@/utils/filterString';
 import { FontKey, WatermarkStyle, WatermarkLogo, DEFAULT_ADJUSTMENTS, ExportOptions, WatermarkConfig, ImageAdjustments } from '@/types/watermark';
 
 export default function EditorPage() {
@@ -127,10 +128,37 @@ export default function EditorPage() {
 
   const [customPos, setCustomPos] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  // Placement history (undo stack) for watermark position and logos
+  const [, setPlacementHistory] = useState<Array<{ position: string; customPos: { x: number; y: number } | null; logos: WatermarkLogo[] }>>([]);
+  const MAX_HISTORY = 30;
   const [processing, setProcessing] = useState(false);
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
   const [useEnginePreview, setUseEnginePreview] = useState<boolean>(true);
   const [previewQuality, setPreviewQuality] = useState<'small'|'standard'|'hd'>('small');
+  const [previewFullscreen, setPreviewFullscreen] = useState(false);
+  // Ref used to request the preview component flush any pending pointer positions
+  const placementFlushRef = useRef<(() => void) | null>(null);
+  const fullscreenContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Close fullscreen on Escape for easier mobile/keyboard dismissal
+  useEffect(() => {
+    if (!previewFullscreen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPreviewFullscreen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [previewFullscreen]);
+
+  // On mobile, prefer inline/CSS preview for responsiveness and default to smaller preview quality
+  useEffect(() => {
+    try {
+      if (window.innerWidth < 900) {
+        setUseEnginePreview(false);
+        setPreviewQuality('small');
+      }
+    } catch (err) {
+      console.debug('mobile preview default check failed', err);
+    }
+  }, []);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [exportQuality, setExportQuality] = useState<'normal'|'standard'|'hd'|'ultra'>('standard');
@@ -380,7 +408,8 @@ export default function EditorPage() {
 
     // Only generate preview when user has engine preview enabled and is in Enhance tab or when adjustments exist
     const adjustmentsExist = [exposure, contrast, saturation, temperature, highlights, shadows, vibrance, clarity, dehaze, vignette, grain, sharpen, tint, hue].some(v => v !== 0) || filterPreset !== 'none';
-    const shouldPreview = useEnginePreview && (activeTab === 'enhance' || adjustmentsExist);
+    // Skip heavy engine preview while user is in fullscreen placement mode to reduce CPU and jank
+    const shouldPreview = useEnginePreview && (activeTab === 'enhance' || adjustmentsExist) && !previewFullscreen;
     if (!shouldPreview) {
       setPreviewDataUrl(null);
       return;
@@ -420,7 +449,7 @@ export default function EditorPage() {
       clearTimeout(id);
       try { if (lastUrl && lastUrl.startsWith('blob:')) URL.revokeObjectURL(lastUrl); } catch (err) { console.debug('revoking preview URL failed', err); }
     };
-  }, [current, activeTab, exposure, contrast, saturation, temperature, highlights, shadows, whites, blacks, vibrance, clarity, dehaze, vignette, grain, sharpen, tint, hue, filterPreset, buildConfig, buildAdjustments, useEnginePreview, previewQuality]);
+  }, [current, activeTab, exposure, contrast, saturation, temperature, highlights, shadows, whites, blacks, vibrance, clarity, dehaze, vignette, grain, sharpen, tint, hue, filterPreset, buildConfig, buildAdjustments, useEnginePreview, previewQuality, previewFullscreen]);
 
   // Lazy-load face model only when AI placement is enabled to avoid loading heavy TFJS code eagerly
   useEffect(() => {
@@ -448,14 +477,150 @@ export default function EditorPage() {
     return () => { cancelled = true };
   }, [aiPlacement]);
 
+  // Push current placement state to history (call before making a change)
+  const pushPlacementHistory = useCallback(() => {
+    setPlacementHistory(prev => {
+      const next = [{ position, customPos, logos: JSON.parse(JSON.stringify(logos || [])) }, ...prev];
+      if (next.length > MAX_HISTORY) next.pop();
+      return next;
+    });
+  }, [position, customPos, logos]);
+
+  // Wrapped setters that record history
+  const setPositionWithHistory = useCallback((p: string) => {
+    pushPlacementHistory();
+    setPosition(p);
+    // clear customPos when switching to named positions
+    if (p !== 'custom') setCustomPos(null);
+  }, [pushPlacementHistory]);
+
+  const setCustomPosWithHistory = useCallback((pos: { x: number; y: number } | null) => {
+    pushPlacementHistory();
+    setCustomPos(pos);
+    if (pos) setPosition('custom');
+  }, [pushPlacementHistory]);
+
+  const setLogosWithHistory = useCallback((nextLogos: WatermarkLogo[]) => {
+    pushPlacementHistory();
+    setLogos(nextLogos);
+  }, [pushPlacementHistory]);
+
+  // Undo the last placement change
+  const undoPlacement = useCallback(() => {
+    setPlacementHistory(prev => {
+      if (!prev || prev.length === 0) return prev;
+      const [last, ...rest] = prev;
+      setPosition(last.position);
+      setCustomPos(last.customPos);
+      setLogos(last.logos || []);
+      return rest;
+    });
+  }, []);
+
+  // Reset placement to defaults (bottom-right, no customPos)
+  const resetPlacement = useCallback(() => {
+    pushPlacementHistory();
+    setPosition('bottom-right');
+    setCustomPos(null);
+    // Optionally reset logos to center-ish defaults
+    setLogos(prev => (prev || []).map((l, idx) => ({ ...l, position: { x: 0.5 + idx * 0.03, y: 0.5 + idx * 0.03 } })));
+  }, [pushPlacementHistory]);
+
+  // Keyboard shortcut: Ctrl+Z to undo placement
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().includes('MAC');
+      const undoKey = isMac ? (e.metaKey && e.key.toLowerCase() === 'z') : (e.ctrlKey && e.key.toLowerCase() === 'z');
+      if (undoKey) {
+        e.preventDefault();
+        undoPlacement();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undoPlacement]);
+
   return (
     <div className="min-h-screen relative overflow-hidden bg-[#000913]">
+      {/* Fullscreen preview overlay for small screens */}
+      {previewFullscreen && current && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              try { placementFlushRef.current?.(); } catch (err) { console.debug('flush placement failed', err); }
+              setPreviewFullscreen(false);
+            }
+          }}
+        >
+              <div ref={fullscreenContainerRef} className="relative w-full h-full max-w-[100vw] max-h-screen">
+            <button
+              onClick={() => { try { placementFlushRef.current?.(); } catch (err) { console.debug('flush placement failed', err); } setPreviewFullscreen(false); }}
+              aria-label="Close preview"
+              // Use fixed positioning and explicit zIndex to guarantee visibility across screen sizes
+              style={{ position: 'fixed', top: 12, right: 12, zIndex: 9999 }}
+              className="bg-white text-black px-3 py-2 rounded-md shadow-lg flex items-center gap-2"
+            ><X className="w-4 h-4" />Done</button>
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="relative w-full h-full">
+                <img
+                  src={(useEnginePreview && activeTab === 'enhance' && previewDataUrl) ? previewDataUrl : current.url}
+                  alt="fullscreen preview"
+                  className="w-full h-full object-contain cursor-pointer"
+                  onClick={() => setPreviewFullscreen(false)}
+                />
+                {/* Additional done button for clarity on small screens (visible on all sizes) */}
+                <button
+                  onClick={() => { try { placementFlushRef.current?.(); } catch (err) { console.debug('flush placement failed', err); } setPreviewFullscreen(false); }}
+                  aria-label="Done and return to editor"
+                  style={{ position: 'absolute', bottom: 18, right: 18, zIndex: 9999 }}
+                  className="bg-white text-black px-4 py-2 rounded-full shadow-lg inline-flex"
+                >Done</button>
+                <div className="absolute inset-0 pointer-events-auto">
+                  <WatermarkPreview
+                    watermarkType={watermarkType}
+                    currentUrl={(useEnginePreview && activeTab === 'enhance' && previewDataUrl) ? previewDataUrl : current.url}
+                    faceModelRef={faceModelRef}
+                    watermarkText={watermarkText}
+                    logoUrl={logoUrl}
+                    logoUrls={logoUrls}
+                    logos={logos}
+                    setLogos={setLogosWithHistory}
+                    imageScale={1}
+                    previewImgWidth={previewImgWidth}
+                    size={size}
+                    watermarkColor={watermarkColor}
+                    fontWeightState={fontWeightState}
+                    fontFamily={fontFamily}
+                    style={style}
+                    rotation={rotation}
+                    adaptiveBlend={false}
+                    glowEffect={glowEffect}
+                    position={position}
+                    customPos={customPos}
+                    setCustomPos={setCustomPosWithHistory}
+                    setIsDragging={setIsDragging}
+                    isDragging={isDragging}
+                    setPosition={setPositionWithHistory}
+                    containerRef={fullscreenContainerRef}
+                    flushRef={placementFlushRef}
+                    blendMode={blendMode}
+                    opacity={opacity}
+                    strokeWidth={strokeWidth}
+                    strokeColor={strokeColor}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <motion.header
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="relative z-20 bg-[#031B2F]/80 backdrop-blur-xl border-b border-white/5"
       >
-        <div className="max-w-[1800px] mx-auto px-6 py-4">
+        <div className="max-w-[1800px] mx-auto px-4 py-3 md:px-6 md:py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <motion.button
@@ -474,7 +639,7 @@ export default function EditorPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -488,6 +653,22 @@ export default function EditorPage() {
               >
                 <RotateCcw className="w-4 h-4" />
                 Reset
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="px-4 py-2 rounded-xl bg-[#0A2540]/50 hover:bg-[#0F2F50] border border-white/5 text-[#F4F8FF] font-medium transition-colors items-center gap-2 hidden md:inline-flex"
+                onClick={() => undoPlacement()}
+              >
+                Undo Placement
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="px-4 py-2 rounded-xl bg-[#0A2540]/50 hover:bg-[#0F2F50] border border-white/5 text-[#F4F8FF] font-medium transition-colors items-center gap-2 hidden md:inline-flex"
+                onClick={() => resetPlacement()}
+              >
+                Reset Placement
               </motion.button>
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -528,6 +709,10 @@ export default function EditorPage() {
                           src={(useEnginePreview && activeTab === 'enhance' && previewDataUrl) ? previewDataUrl : current.url}
                           alt="editing"
                           onLoad={() => setPreviewImgWidth(imgRef.current?.clientWidth || 600)}
+                          onClick={() => {
+                            // allow tapping image to enter fullscreen on mobile
+                            if (window.innerWidth < 900) setPreviewFullscreen(true);
+                          }}
                           style={{
                             // When we're showing an engine-generated preview (`previewDataUrl`),
                             // the image already contains the adjustments baked in. Avoid applying
@@ -535,7 +720,7 @@ export default function EditorPage() {
                             // too bright or otherwise incorrect compared to the exported image).
                             filter: (useEnginePreview && activeTab === 'enhance' && previewDataUrl)
                               ? undefined
-                              : `brightness(${1 + exposure / 100}) contrast(${1 + contrast / 100}) saturate(${1 + saturation / 100}) hue-rotate(${temperature * 0.3}deg)`,
+                              : getFilterString(buildAdjustments()),
                             width: `${(imageScale || 1) * 100}%`,
                             height: 'auto',
                             maxHeight: '100%',
@@ -543,6 +728,14 @@ export default function EditorPage() {
                             transition: 'width 160ms ease'
                           }}
                         />
+                        {/* Mobile full-screen hint */}
+                        <button
+                          type="button"
+                          onClick={() => setPreviewFullscreen(true)}
+                          className="absolute bottom-4 right-4 bg-black/50 text-white text-xs px-2 py-1 rounded-md md:hidden"
+                        >
+                          Fullscreen
+                        </button>
                       </div>
                       
                       {/* CRITICAL FIX: WATERMARK PREVIEW OVERLAY */}
@@ -554,7 +747,7 @@ export default function EditorPage() {
                         logoUrl={logoUrl}
                         logoUrls={logoUrls}
                         logos={logos}
-                        setLogos={setLogos}
+                        setLogos={setLogosWithHistory}
                         imageScale={imageScale}
                         previewImgWidth={previewImgWidth}
                         size={size}
@@ -567,11 +760,12 @@ export default function EditorPage() {
                         glowEffect={glowEffect}
                         position={position}
                         customPos={customPos}
-                        setCustomPos={setCustomPos}
+                        setCustomPos={setCustomPosWithHistory}
                         setIsDragging={setIsDragging}
                         isDragging={isDragging}
-                        setPosition={setPosition}
+                        setPosition={setPositionWithHistory}
                         containerRef={containerRef}
+                        flushRef={placementFlushRef}
                         blendMode={blendMode}
                         opacity={opacity}
                         strokeWidth={strokeWidth}
@@ -720,7 +914,7 @@ export default function EditorPage() {
                     logos={logos}
                     setLogoUrl={setLogoUrl}
                     setLogoUrls={setLogoUrls}
-                    setLogos={setLogos}
+                    setLogos={setLogosWithHistory}
                     logoInputRef={logoInputRef}
                     style={style}
                     setStyle={setStyle}
@@ -737,7 +931,7 @@ export default function EditorPage() {
                     rotation={rotation}
                     setRotation={setRotation}
                     position={position}
-                    setPosition={setPosition}
+                    setPosition={setPositionWithHistory}
                     aiPlacement={aiPlacement}
                     setAiPlacement={setAiPlacement}
                     blendMode={blendMode}

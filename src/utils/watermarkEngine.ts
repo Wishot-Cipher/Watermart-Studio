@@ -81,7 +81,7 @@ const STYLE_CONFIGS: Record<WatermarkStyle, {
   'tech-futuristic': {
     background: 'linear-gradient(135deg, rgba(0, 255, 157, 0.25), rgba(0, 112, 243, 0.25))',
     border: '1.5px solid rgba(0, 255, 157, 0.6)',
-    borderRadius: 4,
+    borderRadius: 22,
     padding: { vertical: 14, horizontal: 28 },
     letterSpacing: 1.5,
     boxShadow: { x: 0, y: 0, blur: 20, color: 'rgba(0, 255, 157, 0.4)' }
