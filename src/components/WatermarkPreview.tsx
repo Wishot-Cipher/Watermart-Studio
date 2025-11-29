@@ -6,9 +6,8 @@
 
 import React, { useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Sparkles } from 'lucide-react'
 import * as blazeface from '@tensorflow-models/blazeface'
-import { FontKey, WatermarkStyle } from '@/types/watermark'
+import { FontKey, WatermarkStyle, WatermarkLogo } from '@/types/watermark'
 
 type Props = {
   watermarkType: string
@@ -18,8 +17,8 @@ type Props = {
   logoUrl: string | null
   logoUrls?: string[]
   imageScale?: number
-  logos?: Array<{ url: string; scale?: number; x?: number; y?: number; opacity?: number; rotation?: number }>
-  setLogos?: (v: Array<{ url: string; scale?: number; x?: number; y?: number; opacity?: number; rotation?: number }>) => void
+  logos?: WatermarkLogo[]
+  setLogos?: (v: WatermarkLogo[]) => void
   previewImgWidth: number
   size: number
   watermarkColor: string
@@ -38,6 +37,8 @@ type Props = {
   containerRef: React.RefObject<HTMLDivElement | null>
   blendMode: string
   opacity: number
+  strokeWidth?: number
+  strokeColor?: string
 }
 
 // Professional style mappings
@@ -78,7 +79,7 @@ const STYLE_CLASSES: Record<WatermarkStyle, {
     padding: 'px-6 py-3'
   },
   'gradient-fade': {
-    bg: 'bg-gradient-to-br from-blue-500/85 to-purple-500/85',
+    bg: 'bg-linear-to-br from-blue-500/85 to-purple-500/85',
     border: 'border-none',
     radius: 'rounded-2xl',
     padding: 'px-9 py-4.5'
@@ -90,7 +91,7 @@ const STYLE_CLASSES: Record<WatermarkStyle, {
     padding: 'px-6 py-6'
   },
   'tech-futuristic': {
-    bg: 'bg-gradient-to-br from-green-400/25 to-blue-600/25 backdrop-blur-xl',
+    bg: 'bg-linear-to-br from-green-400/25 to-blue-600/25 backdrop-blur-xl',
     border: 'border-[1.5px] border-green-400/60',
     radius: 'rounded',
     padding: 'px-7 py-3.5'
@@ -123,8 +124,6 @@ export default function WatermarkPreview(props: Props) {
   const { 
     watermarkType, 
     watermarkText, 
-    logoUrl, 
-    logoUrls,
     logos,
     previewImgWidth, 
     size, 
@@ -142,7 +141,9 @@ export default function WatermarkPreview(props: Props) {
     blendMode, 
     opacity,
     style,
-    rotation
+    rotation,
+    strokeWidth,
+    strokeColor
   } = props
 
   useEffect(() => {
@@ -306,97 +307,63 @@ export default function WatermarkPreview(props: Props) {
                 lineHeight: 1.2
               }}
             >
-              {/* Logo */}
-              {(watermarkType === 'logo' || watermarkType === 'both') && (
-                <>
-                  {logos && logos.length > 0 ? (
-                    <>
-                      {logos.map((l, i) => {
-                        const px = l.x !== undefined ? `${l.x}px` : undefined;
-                        const py = l.y !== undefined ? `${l.y}px` : undefined;
-                        const sizePx = Math.max(12, Math.round(logoPreviewSize * (l.scale || 1)));
-                        return (
-                          <img
-                            key={i}
-                            src={l.url}
-                            alt={`logo-${i}`}
-                            className="object-contain absolute z-40 cursor-grab active:cursor-grabbing"
-                            style={{
-                              width: sizePx,
-                              height: sizePx,
-                              left: px,
-                              top: py,
-                              transform: l.x !== undefined && l.y !== undefined ? 'translate(-50%,-50%)' : undefined
-                            }}
-                            onPointerDown={(e) => {
-                              const setLogos = props.setLogos;
-                              if (!setLogos) return;
-                              const pid = e.pointerId;
-                              try { (e.currentTarget as Element).setPointerCapture(pid); } catch (err) { console.debug('setPointerCapture', err); }
-                              const rect = props.containerRef.current?.getBoundingClientRect();
-                              if (!rect) return;
-                              const move = (ev: PointerEvent) => {
-                                const xPct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-                                const yPct = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
-                                // store as CSS pixels for preview positioning
-                                const next = (logos || []).map((item, idx) => idx === i ? { ...item, x: xPct * rect.width, y: yPct * rect.height } : item);
-                                setLogos(next);
-                              };
-                              const up = () => {
-                                try { (e.currentTarget as Element).releasePointerCapture(pid); } catch (err) { console.debug('releasePointerCapture', err); }
-                                window.removeEventListener('pointermove', move);
-                                window.removeEventListener('pointerup', up);
-                              };
-                              window.addEventListener('pointermove', move);
-                              window.addEventListener('pointerup', up);
-                            }}
-                          />
-                        )
-                      })}
-                    </>
-                  ) : (
-                    (logoUrls && logoUrls.length > 0) ? (
-                      <div className="flex items-center gap-2">
-                        {logoUrls.map((u, i) => (
-                          <img key={i} src={u} alt={`logo-${i}`} className="object-contain" style={{ width: logoPreviewSize, height: logoPreviewSize }} />
-                        ))}
-                      </div>
-                    ) : (
-                      logoUrl ? (
-                        <img 
-                          src={logoUrl} 
-                          alt="logo" 
-                          style={{
-                            width: logoPreviewSize,
-                            height: logoPreviewSize,
-                            objectFit: 'contain'
-                          }}
-                          className="flex-shrink-0"
-                        />
-                      ) : (
-                        <div 
-                          className="bg-gradient-to-br from-[#1A7CFF] to-[#A24BFF] rounded-lg flex items-center justify-center flex-shrink-0"
-                          style={{
-                            width: logoPreviewSize,
-                            height: logoPreviewSize
-                          }}
-                        >
-                          <Sparkles style={{ width: logoPreviewSize * 0.6, height: logoPreviewSize * 0.6 }} className="text-white" />
-                        </div>
-                      )
-                    )
-                  )}
-                </>
-              )}
-
               {/* Text */}
               {(watermarkType === 'text' || watermarkType === 'both') && (
-                <span style={{ color: previewColor, fontWeight: Number(fontWeightState) }}>
+                <span style={{
+                  color: previewColor,
+                  fontWeight: Number(fontWeightState),
+                  WebkitTextStroke: (strokeWidth && strokeWidth > 0) ? `${strokeWidth}px ${strokeColor || '#000'}` : undefined,
+                  textShadow: (strokeWidth && strokeWidth > 0) ? `-1px -1px 0 ${strokeColor || '#000'}, 1px -1px 0 ${strokeColor || '#000'}, -1px 1px 0 ${strokeColor || '#000'}, 1px 1px 0 ${strokeColor || '#000'}` : undefined
+                }}>
                   {watermarkText}
                 </span>
               )}
             </div>
           </div>
+        
+          {/* Render logos as absolute overlays relative to the image container (not inside watermark box) */}
+          {(watermarkType === 'logo' || watermarkType === 'both') && logos && logos.length > 0 && logos.map((l, i) => {
+            const sizePx = Math.max(12, Math.round(logoPreviewSize * (l.size / 100)));
+            const left = `${(l.position?.x ?? 0.9) * 100}%`;
+            const top = `${(l.position?.y ?? 0.9) * 100}%`;
+            return (
+              <div
+                key={l.id || i}
+                className="absolute z-50 cursor-grab active:cursor-grabbing"
+                style={{
+                  width: sizePx,
+                  height: sizePx,
+                  left,
+                  top,
+                  transform: 'translate(-50%,-50%)'
+                }}
+                onPointerDown={(e) => {
+                  const setLogos = props.setLogos;
+                  if (!setLogos) return;
+                  const pid = e.pointerId;
+                  try { (e.currentTarget as Element).setPointerCapture(pid); } catch (err) { console.debug('setPointerCapture', err); }
+                  const rect = props.containerRef.current?.getBoundingClientRect();
+                  if (!rect) return;
+                  const move = (ev: PointerEvent) => {
+                    const xPct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+                    const yPct = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
+                    const next = (logos || []).map((item, idx) => idx === i ? { ...item, position: { x: xPct, y: yPct } } : item);
+                    setLogos(next);
+                  };
+                  const up = () => {
+                    try { (e.currentTarget as Element).releasePointerCapture(pid); } catch (err) { console.debug('releasePointerCapture', err); }
+                    window.removeEventListener('pointermove', move);
+                    window.removeEventListener('pointerup', up);
+                  };
+                  window.addEventListener('pointermove', move);
+                  window.addEventListener('pointerup', up);
+                }}
+              >
+                <img src={l.dataUrl} alt={`logo-${i}`} className="object-contain w-full h-full" style={{ display: 'block' }} />
+                <div className="absolute -top-2 -right-2 bg-black/70 text-white text-[10px] px-1 rounded-md border border-white/20">{sizePx}px</div>
+              </div>
+            )
+          })}
         </motion.div>
       )}
     </AnimatePresence>

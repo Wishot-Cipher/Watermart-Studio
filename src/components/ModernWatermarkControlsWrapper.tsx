@@ -6,17 +6,17 @@
 
 import React from 'react';
 import WatermarkControls from './WatermarkControls';
-import { WatermarkConfig, ImageAdjustments, FontKey, WatermarkStyle } from '@/types/watermark';
+import { WatermarkConfig, ImageAdjustments, FontKey, WatermarkStyle, WatermarkLogo, DEFAULT_ADJUSTMENTS } from '@/types/watermark';
 
 interface WrapperProps {
   watermarkText: string;
   setWatermarkText: (s: string) => void;
   logoUrl: string | null;
   logoUrls: string[];
-  logos?: Array<{ url: string; scale?: number; x?: number; y?: number; opacity?: number; rotation?: number }>;
+  logos?: WatermarkLogo[];
   setLogoUrl: (u: string | null) => void;
   setLogoUrls: (u: string[]) => void;
-  setLogos?: (v: Array<{ url: string; scale?: number; x?: number; y?: number; opacity?: number; rotation?: number }>) => void;
+  setLogos?: (v: WatermarkLogo[]) => void;
   logoInputRef: React.RefObject<HTMLInputElement | null>;
   style: WatermarkStyle;
   setStyle: (s: WatermarkStyle) => void;
@@ -52,16 +52,53 @@ interface WrapperProps {
   setSaturation: (n: number) => void;
   temperature: number;
   setTemperature: (n: number) => void;
+  highlights: number;
+  setHighlights: (n: number) => void;
+  shadows: number;
+  setShadows: (n: number) => void;
+  whites: number;
+  setWhites: (n: number) => void;
+  blacks: number;
+  setBlacks: (n: number) => void;
+  vibrance: number;
+  setVibrance: (n: number) => void;
+  clarity: number;
+  setClarity: (n: number) => void;
+  dehaze: number;
+  setDehaze: (n: number) => void;
+  vignette: number;
+  setVignette: (n: number) => void;
+  grain: number;
+  setGrain: (n: number) => void;
+  sharpen: number;
+  setSharpen: (n: number) => void;
+  tint: number;
+  setTint: (n: number) => void;
+  hue: number;
+  setHue: (n: number) => void;
+  filterPreset: ImageAdjustments['filterPreset'];
+  setFilterPreset: (p: ImageAdjustments['filterPreset']) => void;
+  gradientFrom?: string;
+  setGradientFrom?: (c: string) => void;
+  gradientTo?: string;
+  setGradientTo?: (c: string) => void;
+  strokeWidth?: number;
+  setStrokeWidth?: (n: number) => void;
+  strokeColor?: string;
+  setStrokeColor?: (c: string) => void;
 }
 
 export default function ModernWatermarkControlsWrapper(props: WrapperProps) {
   // BUG FIX #1: Use props.logoUrl instead of null
+  // map legacy logoUrls into WatermarkLogo objects in a stable way
+  const mappedFromUrls = React.useMemo<WatermarkLogo[]>(() => {
+    return (props.logoUrls || []).map((u, idx) => ({ id: `logo-${idx}-${String(u).slice(0,8)}`, dataUrl: u, position: { x: 0.5, y: 0.5 }, size: 100, rotation: 0, opacity: 100 } as WatermarkLogo));
+  }, [props.logoUrls]);
+
   const config: WatermarkConfig = {
     text: props.watermarkText,
-    logoUrl: props.logoUrl, // ← CRITICAL FIX: was hardcoded to null
-    logoUrls: props.logoUrls,
-    // map legacy url array into richer logos metadata with default scale=1
-    logos: (props.logos && props.logos.length > 0) ? props.logos : (props.logoUrls || []).map(u => ({ url: u, scale: 1 })),
+    // prefer richer logos passed down; otherwise use the mapped legacy urls
+    logos: (props.logos && props.logos.length > 0) ? props.logos : mappedFromUrls,
     style: props.style,
     fontFamily: props.fontFamily,
     fontWeight: props.fontWeight,
@@ -74,13 +111,33 @@ export default function ModernWatermarkControlsWrapper(props: WrapperProps) {
     blendMode: props.blendMode,
     shadowIntensity: props.shadowIntensity,
     glowEffect: props.glowEffect
+    ,
+    gradientFrom: props.gradientFrom,
+    gradientTo: props.gradientTo
+    ,
+    strokeWidth: props.strokeWidth,
+    strokeColor: props.strokeColor
   };
 
   const adjustments: ImageAdjustments = {
+    ...DEFAULT_ADJUSTMENTS,
     exposure: props.exposure,
     contrast: props.contrast,
     saturation: props.saturation,
-    temperature: props.temperature
+    temperature: props.temperature,
+    highlights: props.highlights,
+    shadows: props.shadows,
+    whites: props.whites,
+    blacks: props.blacks,
+    vibrance: props.vibrance,
+    clarity: props.clarity,
+    dehaze: props.dehaze,
+    vignette: props.vignette,
+    grain: props.grain,
+    sharpen: props.sharpen,
+    tint: props.tint,
+    hue: props.hue,
+    filterPreset: props.filterPreset
   };
 
   const setConfig = (newConfig: WatermarkConfig) => {
@@ -88,19 +145,13 @@ export default function ModernWatermarkControlsWrapper(props: WrapperProps) {
     if (newConfig.text !== config.text) {
       props.setWatermarkText(newConfig.text);
     }
-    if (newConfig.logoUrl !== config.logoUrl) {
-      // keep single logoUrl in sync
-      props.setLogoUrl(newConfig.logoUrl);
-    }
     // multiple logos
     // support both legacy logoUrls and new logos array
-    if (newConfig.logoUrls && JSON.stringify(newConfig.logoUrls) !== JSON.stringify(config.logoUrls || [])) {
-      props.setLogoUrls(newConfig.logoUrls || []);
-    }
+    // sync logos array if it changed
     if (newConfig.logos && JSON.stringify(newConfig.logos) !== JSON.stringify(config.logos || [])) {
-      // if parent provided a setLogos handler, pass full objects; otherwise sync urls
       if (props.setLogos) props.setLogos(newConfig.logos || []);
-      else props.setLogoUrls((newConfig.logos || []).map((l: any) => l.url));
+      // also keep legacy logoUrls in sync for components still using them
+      props.setLogoUrls((newConfig.logos || []).map((l: any) => (l.dataUrl || (l.url as string))));
     }
     if (newConfig.style !== config.style) {
       props.setStyle(newConfig.style);
@@ -138,6 +189,12 @@ export default function ModernWatermarkControlsWrapper(props: WrapperProps) {
     if (newConfig.glowEffect !== config.glowEffect) {
       props.setGlowEffect(newConfig.glowEffect);
     }
+    if (typeof newConfig.strokeWidth !== 'undefined' && newConfig.strokeWidth !== config.strokeWidth && props.setStrokeWidth) {
+      props.setStrokeWidth(newConfig.strokeWidth);
+    }
+    if (typeof newConfig.strokeColor !== 'undefined' && newConfig.strokeColor !== config.strokeColor && props.setStrokeColor) {
+      props.setStrokeColor(newConfig.strokeColor);
+    }
   };
 
   const setAdjustments = (newAdj: ImageAdjustments) => {
@@ -154,27 +211,33 @@ export default function ModernWatermarkControlsWrapper(props: WrapperProps) {
     if (newAdj.temperature !== adjustments.temperature) {
       props.setTemperature(newAdj.temperature);
     }
+    if (newAdj.highlights !== adjustments.highlights) props.setHighlights(newAdj.highlights);
+    if (newAdj.shadows !== adjustments.shadows) props.setShadows(newAdj.shadows);
+    if (newAdj.whites !== adjustments.whites) props.setWhites(newAdj.whites);
+    if (newAdj.blacks !== adjustments.blacks) props.setBlacks(newAdj.blacks);
+    if (newAdj.vibrance !== adjustments.vibrance) props.setVibrance(newAdj.vibrance);
+    if (newAdj.clarity !== adjustments.clarity) props.setClarity(newAdj.clarity);
+    if (newAdj.dehaze !== adjustments.dehaze) props.setDehaze(newAdj.dehaze);
+    if (newAdj.vignette !== adjustments.vignette) props.setVignette(newAdj.vignette);
+    if (newAdj.grain !== adjustments.grain) props.setGrain(newAdj.grain);
+    if (newAdj.sharpen !== adjustments.sharpen) props.setSharpen(newAdj.sharpen);
+    if (newAdj.tint !== adjustments.tint) props.setTint(newAdj.tint);
+    if (newAdj.hue !== adjustments.hue) props.setHue(newAdj.hue);
+    if (newAdj.filterPreset !== adjustments.filterPreset) props.setFilterPreset(newAdj.filterPreset);
   };
 
   // BUG FIX #2: Handle null correctly - signature matches ProfessionalWatermarkControls
-  const handleLogoUpload = (dataUrl: string | null) => {
-    console.log('Controls -> handleLogoUpload:', dataUrl);
-    if (!dataUrl) return props.setLogoUrl(null);
-    // add to logoUrls list and also set legacy single url
-    const next = [...(props.logoUrls || []), dataUrl];
-    props.setLogoUrls(next);
-    props.setLogoUrl(dataUrl);
-    if (props.setLogos) {
-      const full = [...(props.logos || []), { url: dataUrl, scale: 1 }];
-      props.setLogos(full);
-    }
+  // New API: controls will call this with the updated logos array
+  const handleLogosUpdated = (logos: WatermarkLogo[]) => {
+    console.log('Controls -> handleLogosUpdated:', logos);
+    if (props.setLogos) props.setLogos(logos);
+    // keep legacy logoUrls and single logoUrl in sync for older consumers
+    const urls = (logos || []).map(l => l.dataUrl || '');
+    props.setLogoUrls(urls);
+    props.setLogoUrl(urls[urls.length - 1] ?? null);
   };
 
-  const handleRemoveLogo = (index: number) => {
-    const next = (props.logoUrls || []).filter((_, i) => i !== index);
-    props.setLogoUrls(next);
-    props.setLogoUrl(next[0] ?? null);
-  };
+  
 
   return (
     <WatermarkControls
@@ -182,9 +245,14 @@ export default function ModernWatermarkControlsWrapper(props: WrapperProps) {
       setConfig={setConfig}
       adjustments={adjustments}
       setAdjustments={setAdjustments}
-      onLogoUpload={handleLogoUpload}
+      onLogoUpload={handleLogosUpdated}
       logoInputRef={props.logoInputRef}
-      onRemoveLogo={handleRemoveLogo}
+      // Hide image editing in the watermark tab (moved to Enhance)
+      showImageEditing={false}
+      strokeWidth={props.strokeWidth}
+      setStrokeWidth={props.setStrokeWidth}
+      strokeColor={props.strokeColor}
+      setStrokeColor={props.setStrokeColor}
     />
   );
 }

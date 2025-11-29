@@ -33,7 +33,7 @@ export default function Footer() {
   return (
     <footer className="relative border-t border-white/5 bg-[#031B2F]/50 backdrop-blur-xl mt-20 lg:ml-24">
       {/* Decorative gradient line */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#1A7CFF] to-transparent opacity-50" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-[#1A7CFF] to-transparent opacity-50" />
 
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-12 py-12">
         {/* Main Footer Content */}
@@ -47,8 +47,8 @@ export default function Footer() {
               className="flex items-center gap-3 mb-4"
             >
               <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-br from-[#1A7CFF] to-[#A24BFF] rounded-xl blur-lg opacity-50" />
-                <div className="relative w-10 h-10 bg-gradient-to-br from-[#1A7CFF] to-[#A24BFF] rounded-xl flex items-center justify-center">
+                <div className="absolute inset-0 bg-linear-to-br from-[#1A7CFF] to-[#A24BFF] rounded-xl blur-lg opacity-50" />
+                <div className="relative w-10 h-10 bg-linear-to-br from-[#1A7CFF] to-[#A24BFF] rounded-xl flex items-center justify-center">
                   <Sparkles className="w-5 h-5 text-white" />
                 </div>
               </div>

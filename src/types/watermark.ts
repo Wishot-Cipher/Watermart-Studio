@@ -1,6 +1,9 @@
-// src/types/watermark.ts - Clean type definitions
+// ===================================================================
+// src/types/watermark.ts
+// ENHANCED WITH MULTI-LOGO AND ADVANCED FEATURES
+// ===================================================================
 
-export type FontKey = 'inter' | 'playfair' | 'montserrat' | 'roboto-slab' | 'pacifico'
+export type FontKey = 'inter' | 'playfair' | 'montserrat' | 'roboto-slab' | 'pacifico';
 
 export type WatermarkStyle = 
   | 'modern-glass'
@@ -10,49 +13,128 @@ export type WatermarkStyle =
   | 'minimal-clean'
   | 'gradient-fade'
   | 'stamp-vintage'
-  | 'tech-futuristic'
+  | 'tech-futuristic';
+
+// Enhanced Logo with individual controls
+export interface WatermarkLogo {
+  id: string;
+  dataUrl: string;
+  position: { x: number; y: number };
+  size: number; // 1-200 scale
+  rotation: number; // -180 to 180
+  opacity: number; // 0-100
+  locked?: boolean; // Lock position/size
+}
 
 export interface WatermarkConfig {
-  text: string
-  // Keep legacy single logo for compatibility, and add multiple logos support
-  logoUrl: string | null
-  // New richer logo objects allow per-logo scale/position/opacity
-  logoUrls?: string[]
-  logos?: Array<{
-    url: string
-    // size multiplier relative to computed base logo size (1 = default)
-    scale?: number
-    // optional custom position in CSS pixels (x,y)
-    x?: number
-    y?: number
-    // per-logo opacity (0-100)
-    opacity?: number
-    // rotation in degrees
-    rotation?: number
-  }>
-  // Image scale multiplier (1 = original size, 2 = 2x larger)
-  imageScale?: number
-  style: WatermarkStyle
-  fontFamily: FontKey
-  fontWeight: '400' | '600' | '700' | '800'
-  color: string
-  size: number
-  opacity: number
-  rotation: number
-  position: string
-  aiPlacement: boolean
-  blendMode: string
-  shadowIntensity: number
-  glowEffect: boolean
+  text: string;
+  logos: WatermarkLogo[]; // Support multiple logos
+  style: WatermarkStyle;
+  fontFamily: FontKey;
+  fontWeight: '400' | '600' | '700' | '800';
+  color: string;
+  size: number;
+  opacity: number;
+  rotation: number;
+  position: string;
+  aiPlacement: boolean;
+  blendMode: string;
+  shadowIntensity: number;
+  glowEffect: boolean;
+  gradientFrom?: string;
+  gradientTo?: string;
+  strokeWidth?: number;
+  strokeColor?: string;
 }
 
+// Enhanced image adjustments with professional controls
 export interface ImageAdjustments {
-  exposure: number
-  contrast: number
-  saturation: number
-  temperature: number
+  // Basic adjustments
+  exposure: number;
+  contrast: number;
+  saturation: number;
+  temperature: number;
+  
+  // Professional adjustments
+  highlights: number;
+  shadows: number;
+  whites: number;
+  blacks: number;
+  vibrance: number;
+  clarity: number;
+  dehaze: number;
+  vignette: number;
+  grain: number;
+  sharpen: number;
+  
+  // Color grading
+  tint: number;
+  hue: number;
+  
+  // Filters
+  filterPreset?:
+    | 'none'
+    | 'vivid'
+    | 'dramatic'
+    | 'warm'
+    | 'cool'
+    | 'vintage'
+    | 'bw'
+    | 'cinematic'
+    | 'portrait'
+    | 'hdr'
+    | 'matte'
+    | 'film'
+    | 'moody'
+    | 'pro'
+    // Additional creative presets
+    | 'golden-hour'
+    | 'magazine-cover'
+    | 'teal-orange'
+    | 'fashion-editorial'
+    | 'neon-pop'
+    | 'cyberpunk'
+    | 'tropical-vibes'
+    | 'ocean-depth'
+    | 'autumn-warmth'
+    | 'sunset-glow'
+    | 'luxury-gold'
+    | 'arctic-blue'
+    | 'nordic-minimal'
+    | 'pastel-dream'
+    | 'urban-grit';
 }
 
-export interface WatermarkMeta extends WatermarkConfig {
-  customPos?: { x: number; y: number }
+export interface ExportOptions {
+  quality: 'normal' | 'standard' | 'hd' | 'ultra';
+  format: 'jpg' | 'png' | 'webp';
+  watermarkEnabled: boolean;
 }
+
+export const DEFAULT_ADJUSTMENTS: ImageAdjustments = {
+  exposure: 0,
+  contrast: 0,
+  saturation: 0,
+  temperature: 0,
+  highlights: 0,
+  shadows: 0,
+  whites: 0,
+  blacks: 0,
+  vibrance: 0,
+  clarity: 0,
+  dehaze: 0,
+  vignette: 0,
+  grain: 0,
+  sharpen: 0,
+  tint: 0,
+  hue: 0,
+  filterPreset: 'none'
+};
+
+export const EXPORT_QUALITY_SETTINGS = {
+  normal: { quality: 0.75, maxDimension: 1280 },
+  standard: { quality: 0.85, maxDimension: 1920 },
+  // Canva-like targets: keep HD and Ultra modest to avoid huge downloads
+  hd: { quality: 0.87, maxDimension: 2036 },
+  ultra: { quality: 1.0, maxDimension: 2548 }
+};

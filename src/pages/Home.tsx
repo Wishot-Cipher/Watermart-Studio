@@ -120,7 +120,7 @@ export default function HomePage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-8">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1A7CFF] to-[#A24BFF] flex items-center justify-center shadow-[0_0_20px_rgba(26,124,255,0.4)]">
+                <div className="w-10 h-10 rounded-xl bg-linear-to-br from-[#1A7CFF] to-[#A24BFF] flex items-center justify-center shadow-[0_0_20px_rgba(26,124,255,0.4)]">
                   <Sparkles className="w-6 h-6 text-white" />
                 </div>
                 <span className="text-xl font-bold text-[#F4F8FF]">WaterMark Studio</span>
@@ -161,15 +161,15 @@ export default function HomePage() {
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
               <div>
                 <h1 className="text-4xl lg:text-5xl font-bold text-[#F4F8FF] mb-3">
-                  Welcome back, <span className="bg-gradient-to-r from-[#1A7CFF] to-[#A24BFF] bg-clip-text text-transparent">Media Team</span>
+                  Welcome back, <span className="bg-linear-to-r from-[#1A7CFF] to-[#A24BFF] bg-clip-text text-transparent">Media Team</span>
                 </h1>
                 <p className="text-lg text-[#9FB2C8]">Transform your images with professional watermarks in seconds</p>
               </div>
 
-              <motion.button
+                <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className="hidden lg:flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#1A7CFF] to-[#0D6EF5] text-white font-semibold shadow-[0_0_30px_rgba(26,124,255,0.4)] whitespace-nowrap"
+                className="hidden lg:flex items-center gap-2 px-6 py-3 rounded-xl bg-linear-to-r from-[#1A7CFF] to-[#0D6EF5] text-white font-semibold shadow-[0_0_30px_rgba(26,124,255,0.4)] whitespace-nowrap"
               >
                 <Zap className="w-5 h-5" />
                 Upgrade to Pro
@@ -186,10 +186,10 @@ export default function HomePage() {
                   transition={{ delay: 0.1 * index, duration: 0.5 }}
                   className="relative group"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-br from-[#1A7CFF]/20 to-[#A24BFF]/10 rounded-2xl blur-xl opacity-50 group-hover:opacity-70 transition-opacity duration-300" />
+                  <div className="absolute inset-0 bg-linear-to-br from-[#1A7CFF]/20 to-[#A24BFF]/10 rounded-2xl blur-xl opacity-50 group-hover:opacity-70 transition-opacity duration-300" />
                   <div className="relative bg-[#031B2F]/80 backdrop-blur-xl border border-white/10 group-hover:border-[#1A7CFF]/30 rounded-2xl p-6 transition-all duration-300">
                     <div className="flex items-start justify-between mb-4">
-                      <div className="p-3 rounded-xl bg-gradient-to-br from-[#1A7CFF]/20 to-transparent">
+                      <div className="p-3 rounded-xl bg-linear-to-br from-[#1A7CFF]/20 to-transparent">
                         <stat.icon className="w-6 h-6" style={{ color: stat.color }} />
                       </div>
                       <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#10D98E]/10">
@@ -226,8 +226,8 @@ export default function HomePage() {
                 if (files.length) await handleFilesAdded(files);
               }}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-[#1A7CFF] to-[#A24BFF] rounded-3xl blur-3xl opacity-20 group-hover:opacity-30 transition-opacity duration-300" />
-              <div className={`relative bg-gradient-to-br from-[#0A2540]/90 to-[#031B2F]/90 backdrop-blur-xl border-2 ${
+              <div className="absolute inset-0 bg-linear-to-br from-[#1A7CFF] to-[#A24BFF] rounded-3xl blur-3xl opacity-20 group-hover:opacity-30 transition-opacity duration-300" />
+              <div className={`relative bg-linear-to-br from-[#0A2540]/90 to-[#031B2F]/90 backdrop-blur-xl border-2 ${
                 isDragging ? 'border-[#1A7CFF] bg-[#1A7CFF]/5' : 'border-dashed border-[#1A7CFF]/30'
               } rounded-3xl p-12 lg:p-20 transition-all duration-300`}>
                 <div className="flex flex-col items-center text-center space-y-6">
@@ -236,8 +236,8 @@ export default function HomePage() {
                     transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
                     className="relative"
                   >
-                    <div className="absolute inset-0 bg-gradient-to-br from-[#1A7CFF] to-[#A24BFF] rounded-3xl blur-2xl opacity-60" />
-                    <div className="relative bg-gradient-to-br from-[#1A7CFF] to-[#A24BFF] p-8 rounded-3xl shadow-[0_0_60px_rgba(26,124,255,0.4)]">
+                    <div className="absolute inset-0 bg-linear-to-br from-[#1A7CFF] to-[#A24BFF] rounded-3xl blur-2xl opacity-60" />
+                    <div className="relative bg-linear-to-br from-[#1A7CFF] to-[#A24BFF] p-8 rounded-3xl shadow-[0_0_60px_rgba(26,124,255,0.4)]">
                       <Upload className="w-16 h-16 text-white" />
                     </div>
                   </motion.div>
@@ -253,7 +253,7 @@ export default function HomePage() {
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      className="px-10 py-4 rounded-2xl bg-gradient-to-r from-[#1A7CFF] to-[#0D6EF5] text-white text-lg font-semibold shadow-[0_0_40px_rgba(26,124,255,0.5)] hover:shadow-[0_0_60px_rgba(26,124,255,0.7)] transition-all duration-300"
+                      className="px-10 py-4 rounded-2xl bg-linear-to-r from-[#1A7CFF] to-[#0D6EF5] text-white text-lg font-semibold shadow-[0_0_40px_rgba(26,124,255,0.5)] hover:shadow-[0_0_60px_rgba(26,124,255,0.7)] transition-all duration-300"
                       onClick={() => fileInputRef.current?.click()}
                     >
                       Choose Files
@@ -302,11 +302,11 @@ export default function HomePage() {
                 className="mb-10"
               >
                 <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-br from-[#1A7CFF]/10 to-[#A24BFF]/5 rounded-3xl blur-2xl" />
+                  <div className="absolute inset-0 bg-linear-to-br from-[#1A7CFF]/10 to-[#A24BFF]/5 rounded-3xl blur-2xl" />
                   <div className="relative bg-[#031B2F]/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
                     <div className="flex items-center justify-between mb-6">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl bg-gradient-to-br from-[#10D98E]/20 to-transparent">
+                        <div className="p-2 rounded-xl bg-linear-to-br from-[#10D98E]/20 to-transparent">
                           <Check className="w-5 h-5 text-[#10D98E]" />
                         </div>
                         <div>
@@ -319,7 +319,7 @@ export default function HomePage() {
                       <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        className="px-6 py-3 rounded-xl bg-gradient-to-r from-[#1A7CFF] to-[#0D6EF5] text-white font-semibold shadow-[0_0_20px_rgba(26,124,255,0.4)] flex items-center gap-2"
+                        className="px-6 py-3 rounded-xl bg-linear-to-r from-[#1A7CFF] to-[#0D6EF5] text-white font-semibold shadow-[0_0_20px_rgba(26,124,255,0.4)] flex items-center gap-2"
                         onClick={handleEditAll}
                       >
                         <Sparkles className="w-4 h-4" />
@@ -376,7 +376,7 @@ export default function HomePage() {
             >
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-[#1A7CFF]/20 to-transparent">
+                  <div className="p-2 rounded-xl bg-linear-to-br from-[#1A7CFF]/20 to-transparent">
                     <Folder className="w-5 h-5 text-[#1A7CFF]" />
                   </div>
                   <h2 className="text-2xl font-bold text-[#F4F8FF]">Recent Batches</h2>
@@ -398,11 +398,11 @@ export default function HomePage() {
                     className="group cursor-pointer"
                   >
                     <div className="relative">
-                      <div className="absolute inset-0 bg-gradient-to-r from-[#1A7CFF]/10 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                      <div className="absolute inset-0 bg-linear-to-r from-[#1A7CFF]/10 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                       <div className="relative bg-[#031B2F]/60 backdrop-blur-xl border border-white/5 group-hover:border-[#1A7CFF]/30 rounded-2xl p-5 transition-all duration-300">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
-                            <div className="p-3 rounded-xl bg-gradient-to-br from-[#1A7CFF]/20 to-transparent">
+                            <div className="p-3 rounded-xl bg-linear-to-br from-[#1A7CFF]/20 to-transparent">
                               <Image className="w-5 h-5 text-[#1A7CFF]" />
                             </div>
                             <div>
@@ -431,12 +431,12 @@ export default function HomePage() {
             >
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-[#A24BFF]/20 to-transparent">
+                  <div className="p-2 rounded-xl bg-linear-to-br from-[#A24BFF]/20 to-transparent">
                     <BarChart3 className="w-5 h-5 text-[#A24BFF]" />
                   </div>
                   <h2 className="text-2xl font-bold text-[#F4F8FF]">Templates</h2>
                 </div>
-                <button className="p-2 rounded-xl bg-gradient-to-br from-[#1A7CFF]/20 to-transparent hover:from-[#1A7CFF]/30 transition-all">
+                <button className="p-2 rounded-xl bg-linear-to-br from-[#1A7CFF]/20 to-transparent hover:from-[#1A7CFF]/30 transition-all">
                   <Plus className="w-5 h-5 text-[#1A7CFF]" />
                 </button>
               </div>
@@ -452,7 +452,7 @@ export default function HomePage() {
                     className="group cursor-pointer"
                   >
                     <div className="relative aspect-square">
-                      <div className="absolute inset-0 bg-gradient-to-br from-[#1A7CFF]/20 to-[#A24BFF]/10 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                      <div className="absolute inset-0 bg-linear-to-br from-[#1A7CFF]/20 to-[#A24BFF]/10 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                       <div className="relative h-full bg-[#031B2F]/60 backdrop-blur-xl border border-white/5 group-hover:border-[#1A7CFF]/30 rounded-2xl p-4 transition-all duration-300">
                         <div className="h-full flex flex-col items-center justify-center">
                           <div className="text-4xl mb-3">{watermark.emoji}</div>

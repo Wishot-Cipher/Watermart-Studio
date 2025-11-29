@@ -1,6 +1,6 @@
 import React from 'react'
 import WatermarkControls from './WatermarkControls'
-import { FontKey, WatermarkStyle } from '@/types/watermark'
+import { FontKey, WatermarkStyle, WatermarkLogo, DEFAULT_ADJUSTMENTS } from '@/types/watermark'
 
 type Props = {
   watermarkText: string
@@ -46,7 +46,7 @@ type Props = {
 
 export default function ModernWatermarkControls(props: Props) {
   const {
-    watermarkText, setWatermarkText, setLogoUrl, logoInputRef,
+    watermarkText, setWatermarkText, logoUrl, setLogoUrl, logoInputRef,
     style, setStyle, fontFamily, setFontFamily, fontWeight, setFontWeight,
     color, setColor, size, setSize, opacity, setOpacity, rotation, setRotation,
     position, setPosition, aiPlacement, setAiPlacement, blendMode, setBlendMode,
@@ -58,7 +58,8 @@ export default function ModernWatermarkControls(props: Props) {
   // Build `config` and `adjustments` objects expected by `WatermarkControls`
   const config = {
     text: watermarkText,
-    logoUrl: null as string | null,
+    // prefer passing logos array to new controls; if a single `logoUrl` exists map it to a single WatermarkLogo
+    logos: (logoUrl ? [{ id: `logo-0-${String(logoUrl).slice(0,8)}`, dataUrl: logoUrl, position: { x: 0.9, y: 0.9 }, size: 100, rotation: 0, opacity: 100 } as WatermarkLogo] : []) as WatermarkLogo[],
     style,
     fontFamily,
     fontWeight,
@@ -74,6 +75,7 @@ export default function ModernWatermarkControls(props: Props) {
   }
 
   const adjustments = {
+    ...DEFAULT_ADJUSTMENTS,
     exposure,
     contrast,
     saturation,
@@ -82,7 +84,10 @@ export default function ModernWatermarkControls(props: Props) {
 
   const setConfig = (c: Partial<import('@/types/watermark').WatermarkConfig>) => {
     if (typeof c.text === 'string') setWatermarkText(c.text)
-    if ('logoUrl' in c) setLogoUrl(c.logoUrl ?? null)
+    if ('logos' in c && Array.isArray(c.logos)) {
+      const last = c.logos.length > 0 ? (c.logos[c.logos.length - 1] as WatermarkLogo) : null;
+      setLogoUrl(last ? last.dataUrl : null);
+    }
     if (c.style) setStyle(c.style)
     if (c.fontFamily) setFontFamily(c.fontFamily)
     if (c.fontWeight) setFontWeight(c.fontWeight)
@@ -110,7 +115,11 @@ export default function ModernWatermarkControls(props: Props) {
       setConfig={setConfig}
       adjustments={adjustments}
       setAdjustments={setAdjustments}
-      onLogoUpload={(d) => setLogoUrl(d)}
+      onLogoUpload={(logos: WatermarkLogo[]) => {
+        // controls emit full logos array; map to single legacy logoUrl for callers that expect it
+        const last = logos && logos.length > 0 ? logos[logos.length - 1].dataUrl : null;
+        setLogoUrl(last);
+      }}
       logoInputRef={logoInputRef}
     />
   )

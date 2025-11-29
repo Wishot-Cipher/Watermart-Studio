@@ -46,8 +46,8 @@ export default function Sidebar() {
           animate={{ opacity: 1, scale: 1 }}
           className="relative mb-12 group cursor-pointer"
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-[#1A7CFF] to-[#A24BFF] rounded-2xl blur-xl opacity-50 group-hover:opacity-70 transition-opacity" />
-          <div className="relative w-14 h-14 bg-gradient-to-br from-[#1A7CFF] to-[#A24BFF] rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(26,124,255,0.3)]">
+          <div className="absolute inset-0 bg-linear-to-br from-[#1A7CFF] to-[#A24BFF] rounded-2xl blur-xl opacity-50 group-hover:opacity-70 transition-opacity" />
+          <div className="relative w-14 h-14 bg-linear-to-br from-[#1A7CFF] to-[#A24BFF] rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(26,124,255,0.3)]">
             <Sparkles className="w-7 h-7 text-white" />
           </div>
         </motion.div>
@@ -70,7 +70,7 @@ export default function Sidebar() {
                   {isActive && (
                     <motion.div
                       layoutId="activeIndicator"
-                      className="absolute -left-6 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-[#1A7CFF] to-[#A24BFF] rounded-r-full"
+                      className="absolute -left-6 top-1/2 -translate-y-1/2 w-1 h-8 bg-linear-to-b from-[#1A7CFF] to-[#A24BFF] rounded-r-full"
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -10 }}
@@ -82,7 +82,7 @@ export default function Sidebar() {
                 {/* Glow Effect */}
                 {isActive && (
                   <motion.div
-                    className={`absolute inset-0 bg-gradient-to-br ${item.gradient} rounded-2xl blur-xl opacity-40`}
+                    className={`absolute inset-0 bg-linear-to-br ${item.gradient} rounded-2xl blur-xl opacity-40`}
                     animate={{
                       scale: [1, 1.2, 1],
                       opacity: [0.4, 0.6, 0.4],
@@ -98,7 +98,7 @@ export default function Sidebar() {
                 {/* Button */}
                 <div className={`relative w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${
                   isActive 
-                    ? `bg-gradient-to-br ${item.gradient} shadow-[0_0_20px_${item.color}40]` 
+                    ? `bg-linear-to-br ${item.gradient} shadow-[0_0_20px_${item.color}40]` 
                     : 'bg-[#0A2540]/50 hover:bg-[#0F2F50]'
                 }`}>
                   <item.icon 
@@ -133,7 +133,7 @@ export default function Sidebar() {
             repeat: Infinity,
             ease: "easeInOut"
           }}
-          className="w-10 h-1 bg-gradient-to-r from-transparent via-[#1A7CFF] to-transparent rounded-full opacity-30"
+          className="w-10 h-1 bg-linear-to-r from-transparent via-[#1A7CFF] to-transparent rounded-full opacity-30"
         />
       </aside>
 
@@ -147,8 +147,8 @@ export default function Sidebar() {
             className="flex items-center gap-3"
           >
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-[#1A7CFF] to-[#A24BFF] rounded-xl blur-lg opacity-50" />
-              <div className="relative w-10 h-10 bg-gradient-to-br from-[#1A7CFF] to-[#A24BFF] rounded-xl flex items-center justify-center">
+              <div className="absolute inset-0 bg-linear-to-br from-[#1A7CFF] to-[#A24BFF] rounded-xl blur-lg opacity-50" />
+              <div className="relative w-10 h-10 bg-linear-to-br from-[#1A7CFF] to-[#A24BFF] rounded-xl flex items-center justify-center">
                 <Sparkles className="w-5 h-5 text-white" />
               </div>
             </div>
@@ -227,7 +227,7 @@ export default function Sidebar() {
 
                 {/* Current Page Indicator */}
                 <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-br from-[#1A7CFF]/10 to-[#A24BFF]/5 rounded-xl blur-lg" />
+                  <div className="absolute inset-0 bg-linear-to-br from-[#1A7CFF]/10 to-[#A24BFF]/5 rounded-xl blur-lg" />
                   <div className="relative bg-[#031B2F]/50 backdrop-blur-xl border border-white/5 rounded-xl p-4">
                     <div className="flex items-center gap-3">
                       {(() => {
@@ -235,7 +235,7 @@ export default function Sidebar() {
                         const Icon = currentNav?.icon || Home;
                         return (
                           <>
-                            <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${currentNav?.gradient} flex items-center justify-center`}>
+                            <div className={`w-10 h-10 rounded-lg bg-linear-to-br ${currentNav?.gradient} flex items-center justify-center`}>
                               <Icon className="w-5 h-5 text-white" />
                             </div>
                             <div>
@@ -266,7 +266,7 @@ export default function Sidebar() {
                       {isActive && (
                         <motion.div
                           layoutId="mobileActiveIndicator"
-                          className={`absolute inset-0 bg-gradient-to-br ${item.gradient} rounded-2xl opacity-10`}
+                          className={`absolute inset-0 bg-linear-to-br ${item.gradient} rounded-2xl opacity-10`}
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 0.1 }}
                           exit={{ opacity: 0 }}
@@ -281,7 +281,7 @@ export default function Sidebar() {
                         <div className="flex items-center gap-4">
                           <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 ${
                             isActive 
-                              ? `bg-gradient-to-br ${item.gradient} shadow-[0_0_20px_${item.color}30]` 
+                              ? `bg-linear-to-br ${item.gradient} shadow-[0_0_20px_${item.color}30]` 
                               : 'bg-[#031B2F]/50'
                           }`}>
                             <item.icon 
@@ -317,7 +317,7 @@ export default function Sidebar() {
               {/* Footer */}
               <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-white/5">
                 <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-br from-[#A24BFF]/10 to-transparent rounded-xl blur-lg" />
+                  <div className="absolute inset-0 bg-linear-to-br from-[#A24BFF]/10 to-transparent rounded-xl blur-lg" />
                   <div className="relative bg-[#031B2F]/50 backdrop-blur-xl border border-white/5 rounded-xl p-4 text-center">
                     <Sparkles className="w-8 h-8 text-[#A24BFF] mx-auto mb-2" />
                     <p className="text-sm font-semibold text-[#F4F8FF] mb-1">Upgrade to Pro</p>
@@ -325,7 +325,7 @@ export default function Sidebar() {
                     <motion.button
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
-                      className="w-full py-2 rounded-lg bg-gradient-to-r from-[#A24BFF] to-[#1A7CFF] text-white text-sm font-semibold shadow-[0_0_20px_rgba(162,75,255,0.3)]"
+                      className="w-full py-2 rounded-lg bg-linear-to-r from-[#A24BFF] to-[#1A7CFF] text-white text-sm font-semibold shadow-[0_0_20px_rgba(162,75,255,0.3)]"
                     >
                       Upgrade Now
                     </motion.button>
