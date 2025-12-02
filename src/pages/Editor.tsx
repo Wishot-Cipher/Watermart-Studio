@@ -292,31 +292,7 @@ export default function EditorPage() {
     }
   };
 
-  const applyToSelected = async (ids: string[], qualityParam: 'normal'|'hd'|'standard'|'ultra' = 'standard') => {
-    if (!images || ids.length === 0 || processing) return;
-    setProcessing(true);
-    setBatchProgress({ done: 0, total: ids.length });
-    try {
-      for (let i = 0; i < ids.length; i++) {
-        const id = ids[i];
-        const img = images.find(x => x.id === id);
-        if (!img) continue;
-        const cfg = buildConfig();
-        const adj = buildAdjustments();
-        const exportOpts: ExportOptions = { quality: qualityParam, format: qualityParam === 'hd' ? 'png' : 'jpg', watermarkEnabled: true };
-        const dataUrl = await renderWatermark(img.url, cfg, adj, faceModelRef.current, customPos || undefined, exportOpts);
-        updateImage(img.id, { watermarkedUrl: dataUrl });
-        setBatchProgress(prev => ({ ...prev, done: prev.done + 1 }));
-      }
-    } catch (err) {
-      console.error('Batch watermark failed:', err);
-      alert('Some images failed to process.');
-    } finally {
-      setProcessing(false);
-      setBatchModalOpen(false);
-      setBatchProgress({ done: 0, total: 0 });
-    }
-  };
+  // applyToSelected function removed - batch operations now use exportSelected with ZIP option
 
   const exportSelected = async (ids: string[], qualityParam: 'normal'|'hd'|'standard'|'ultra' = 'standard', asZip = false) => {
     if (!images || ids.length === 0 || processing) return;
@@ -1368,7 +1344,7 @@ export default function EditorPage() {
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   exit={{ scale: 0.9, opacity: 0 }}
-                  className="relative z-60 bg-gradient-to-br from-[#02121b] to-[#031B2F] border border-[#1A7CFF]/20 rounded-2xl p-6 w-[90%] max-w-3xl shadow-[0_0_50px_rgba(26,124,255,0.3)]"
+                  className="relative z-60 bg-linear-to-br from-[#02121b] to-[#031B2F] border border-[#1A7CFF]/20 rounded-2xl p-6 w-[90%] max-w-3xl shadow-[0_0_50px_rgba(26,124,255,0.3)]"
                 >
                   <div className="flex items-center gap-3 mb-4">
                     <div className="p-3 rounded-xl bg-linear-to-br from-[#1A7CFF]/20 to-[#A24BFF]/10">
@@ -1510,7 +1486,7 @@ export default function EditorPage() {
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   exit={{ scale: 0.9, opacity: 0 }}
-                  className="relative z-60 bg-gradient-to-br from-[#02121b] to-[#031B2F] border border-[#1A7CFF]/20 rounded-2xl p-6 w-[90%] max-w-2xl shadow-[0_0_50px_rgba(26,124,255,0.3)]"
+                  className="relative z-60 bg-linear-to-br from-[#02121b] to-[#031B2F] border border-[#1A7CFF]/20 rounded-2xl p-6 w-[90%] max-w-2xl shadow-[0_0_50px_rgba(26,124,255,0.3)]"
                 >
                   <div className="flex items-center gap-3 mb-6">
                     <div className="p-3 rounded-xl bg-linear-to-br from-[#1A7CFF]/20 to-[#A24BFF]/10">
