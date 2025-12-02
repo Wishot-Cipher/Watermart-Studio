@@ -352,6 +352,7 @@ export default function WatermarkPreview(props: Props) {
             style={{ 
               mixBlendMode: (blendMode as any),
               filter: glowEffect ? 'drop-shadow(0 0 25px rgba(26,124,255,0.8))' : 'none', 
+              opacity: opacity / 100,
               left: position === 'custom' && customPos ? `${customPos.x * 100}%` : undefined, 
               top: position === 'custom' && customPos ? `${customPos.y * 100}%` : undefined, 
               transform: `${position === 'custom' && customPos ? 'translate(-50%,-50%) ' : ''}rotate(${rotation}deg)`,
@@ -396,6 +397,8 @@ export default function WatermarkPreview(props: Props) {
             const sizePx = Math.max(12, Math.round(logoPreviewSize * (l.size / 100)));
             const left = `${(l.position?.x ?? 0.9) * 100}%`;
             const top = `${(l.position?.y ?? 0.9) * 100}%`;
+            const logoOpacity = (l.opacity ?? 100) / 100;
+            const logoRotation = l.rotation ?? 0;
             return (
                 <div
                   key={l.id || i}
@@ -406,7 +409,8 @@ export default function WatermarkPreview(props: Props) {
                     height: sizePx,
                     left,
                     top,
-                    transform: 'translate(-50%,-50%)'
+                    transform: `translate(-50%,-50%) rotate(${logoRotation}deg)`,
+                    opacity: logoOpacity
                   }}
                 onPointerDown={(e) => {
                   const setLogos = props.setLogos;
@@ -419,17 +423,18 @@ export default function WatermarkPreview(props: Props) {
                     let rafId: number | null = null;
                     let lastPos: { x: number; y: number } | null = null;
                     const logoEl = e.currentTarget as HTMLElement;
+                    const logoRotation = l.rotation ?? 0;
                     // ensure touch action is disabled so finger drag is not interrupted
                     try { logoEl.style.touchAction = 'none'; } catch (err) { console.debug('set touchAction failed', err); }
                     const move = (ev: PointerEvent) => {
                       const x = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
                       const y = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
                       lastPos = { x, y };
-                      // Immediate visual follow
+                      // Immediate visual follow (preserve rotation)
                       try {
                         logoEl.style.left = `${x * 100}%`;
                         logoEl.style.top = `${y * 100}%`;
-                        logoEl.style.transform = 'translate(-50%,-50%)';
+                        logoEl.style.transform = `translate(-50%,-50%) rotate(${logoRotation}deg)`;
                       } catch (err) { console.debug('logo dom update failed', err); }
                       if (rafId == null) {
                         rafId = requestAnimationFrame(() => {

@@ -13,6 +13,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as blazeface from '@tensorflow-models/blazeface';
 import '@tensorflow/tfjs';
 import { motion, AnimatePresence } from 'framer-motion';
+import JSZip from 'jszip';
 import {
   ArrowLeft,
   Download,
@@ -24,7 +25,9 @@ import {
   Palette,
   Sun,
   Scissors,
-  X
+  X,
+  FileArchive,
+  Zap
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useImages } from '@/contexts/ImagesContext';
@@ -161,6 +164,7 @@ export default function EditorPage() {
   }, []);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [batchModalOpen, setBatchModalOpen] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [exportQuality, setExportQuality] = useState<'normal'|'standard'|'hd'|'ultra'>('standard');
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
   const [gradientFrom, setGradientFrom] = useState<string>('#1A7CFF');
@@ -314,73 +318,148 @@ export default function EditorPage() {
     }
   };
 
-  const exportSelected = async (ids: string[], qualityParam: 'normal'|'hd'|'standard'|'ultra' = 'standard') => {
+  const exportSelected = async (ids: string[], qualityParam: 'normal'|'hd'|'standard'|'ultra' = 'standard', asZip = false) => {
     if (!images || ids.length === 0 || processing) return;
     setProcessing(true);
+    
     try {
-      for (const id of ids) {
-        const img = images.find(x => x.id === id);
-        if (!img) continue;
-        // Always re-render for export so requested quality is applied to the full image
-        const adj = buildAdjustments();
-        const url = await renderWatermark(
-          img.url,
-          {
-            text: watermarkText,
-            logos,
-            style,
-            fontFamily,
-            fontWeight: fontWeightState,
-            color: watermarkColor,
-            gradientFrom,
-            gradientTo,
-            size,
-            opacity,
-            rotation,
-            position,
-            aiPlacement,
-            blendMode,
-            shadowIntensity,
-            glowEffect
-          },
-          adj,
-          faceModelRef.current,
-          customPos || undefined,
-          qualityParam
-        );
-
+      if (asZip && ids.length > 1) {
+        // Batch ZIP export for maintaining quality
+        const zip = new JSZip();
+        const folder = zip.folder('watermarked-images');
+        
+        if (!folder) throw new Error('Failed to create ZIP folder');
+        
+        setBatchProgress({ done: 0, total: ids.length });
+        
+        for (let i = 0; i < ids.length; i++) {
+          const id = ids[i];
+          const img = images.find(x => x.id === id);
+          if (!img) continue;
+          
+          const adj = buildAdjustments();
+          const url = await renderWatermark(
+            img.url,
+            {
+              text: watermarkText,
+              logos,
+              style,
+              fontFamily,
+              fontWeight: fontWeightState,
+              color: watermarkColor,
+              gradientFrom,
+              gradientTo,
+              size,
+              opacity,
+              rotation,
+              position,
+              aiPlacement,
+              blendMode,
+              shadowIntensity,
+              glowEffect,
+              strokeWidth,
+              strokeColor
+            },
+            adj,
+            faceModelRef.current,
+            customPos || undefined,
+            qualityParam
+          );
+          
+          // Convert data URL to blob
+          const blob = await fetch(url).then(r => r.blob());
+          const baseName = img.file?.name ? img.file.name.replace(/\.[^/.]+$/, '') : `image-${i + 1}`;
+          const isPng = qualityParam === 'hd' || qualityParam === 'ultra' || url.startsWith('data:image/png');
+          const fileName = `${baseName}-watermarked.${isPng ? 'png' : 'jpg'}`;
+          
+          folder.file(fileName, blob);
+          setBatchProgress(prev => ({ ...prev, done: prev.done + 1 }));
+        }
+        
+        // Generate and download ZIP
+        const zipBlob = await zip.generateAsync({ 
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        });
+        
         const a = document.createElement('a');
-        a.href = url;
-        const baseName = img.file?.name ? img.file.name.replace(/\.[^/.]+$/, '') : 'image';
-        const isPng = qualityParam === 'hd' || url.startsWith('data:image/png');
-        a.download = `${baseName}-watermarked.${isPng ? 'png' : 'jpg'}`;
+        a.href = URL.createObjectURL(zipBlob);
+        a.download = `watermarked-batch-${qualityParam}-${new Date().getTime()}.zip`;
         document.body.appendChild(a);
         a.click();
         a.remove();
+        URL.revokeObjectURL(a.href);
+        
+      } else {
+        // Individual downloads
+        for (const id of ids) {
+          const img = images.find(x => x.id === id);
+          if (!img) continue;
+          
+          const adj = buildAdjustments();
+          const url = await renderWatermark(
+            img.url,
+            {
+              text: watermarkText,
+              logos,
+              style,
+              fontFamily,
+              fontWeight: fontWeightState,
+              color: watermarkColor,
+              gradientFrom,
+              gradientTo,
+              size,
+              opacity,
+              rotation,
+              position,
+              aiPlacement,
+              blendMode,
+              shadowIntensity,
+              glowEffect,
+              strokeWidth,
+              strokeColor
+            },
+            adj,
+            faceModelRef.current,
+            customPos || undefined,
+            qualityParam
+          );
+
+          const a = document.createElement('a');
+          a.href = url;
+          const baseName = img.file?.name ? img.file.name.replace(/\.[^/.]+$/, '') : 'image';
+          const isPng = qualityParam === 'hd' || qualityParam === 'ultra' || url.startsWith('data:image/png');
+          a.download = `${baseName}-watermarked.${isPng ? 'png' : 'jpg'}`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }
       }
     } catch (err) {
       console.warn('Failed to export selected', err);
     } finally {
       setProcessing(false);
       setBatchModalOpen(false);
+      setBatchProgress({ done: 0, total: 0 });
     }
   };
 
-  const exportImages = async (all = false, qualityParam: 'normal'|'hd'|'standard'|'ultra' = 'standard') => {
+  const exportImages = useCallback(async (all = false, qualityParam: 'normal'|'hd'|'standard'|'ultra' = 'standard') => {
     const toExport = all ? images : (current ? [current] : []);
     for (const img of toExport) {
       try {
           // Always re-render for export to ensure requested quality applies to the full image
           const cfg = buildConfig();
         const adj = buildAdjustments();
-        const exportOpts: ExportOptions = { quality: qualityParam, format: qualityParam === 'hd' ? 'png' : 'jpg', watermarkEnabled: true };
+        const exportOpts: ExportOptions = { quality: qualityParam, format: qualityParam === 'hd' || qualityParam === 'ultra' ? 'png' : 'jpg', watermarkEnabled: true };
         const cfgWithGradient = { ...cfg, gradientFrom, gradientTo };
         const url = await renderWatermark(img.url, cfgWithGradient, adj, faceModelRef.current, customPos || undefined, exportOpts);
 
         const a = document.createElement('a');
         a.href = url;
         const baseName = img.file?.name ? img.file.name.replace(/\.[^/.]+$/, '') : 'image';
-        const isPng = qualityParam === 'hd' || url.startsWith('data:image/png');
+        const isPng = qualityParam === 'hd' || qualityParam === 'ultra' || url.startsWith('data:image/png');
         a.download = `${baseName}-watermarked.${isPng ? 'png' : 'jpg'}`;
         document.body.appendChild(a);
         a.click();
@@ -389,7 +468,7 @@ export default function EditorPage() {
         console.warn('Failed to export', img.id, err);
       }
     }
-  };
+  }, [images, current, buildConfig, buildAdjustments, gradientFrom, gradientTo, customPos]);
 
   useEffect(() => {
     if (!current) return;
@@ -526,19 +605,45 @@ export default function EditorPage() {
     setLogos(prev => (prev || []).map((l, idx) => ({ ...l, position: { x: 0.5 + idx * 0.03, y: 0.5 + idx * 0.03 } })));
   }, [pushPlacementHistory]);
 
-  // Keyboard shortcut: Ctrl+Z to undo placement
+  // Keyboard shortcuts: Ctrl+Z (undo), Ctrl+E (export), Ctrl+B (batch), ? (help)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toUpperCase().includes('MAC');
-      const undoKey = isMac ? (e.metaKey && e.key.toLowerCase() === 'z') : (e.ctrlKey && e.key.toLowerCase() === 'z');
-      if (undoKey) {
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      
+      // Undo: Ctrl/Cmd + Z
+      if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         undoPlacement();
+      }
+      
+      // Export: Ctrl/Cmd + E
+      if (mod && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        if (current) exportImages(false, exportQuality);
+      }
+      
+      // Batch: Ctrl/Cmd + B
+      if (mod && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        if (images.length > 1) setBatchModalOpen(true);
+      }
+      
+      // Help: ? key
+      if (e.key === '?' && !mod) {
+        e.preventDefault();
+        setShowShortcuts(true);
+      }
+      
+      // Escape: Close modals
+      if (e.key === 'Escape') {
+        setBatchModalOpen(false);
+        setShowShortcuts(false);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undoPlacement]);
+  }, [undoPlacement, current, images, exportQuality, exportImages]);
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-[#000913]">
@@ -640,6 +745,15 @@ export default function EditorPage() {
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="p-2 rounded-xl bg-[#0A2540]/50 hover:bg-[#0F2F50] border border-white/5 text-[#F4F8FF] transition-colors"
+                onClick={() => setShowShortcuts(true)}
+                title="Keyboard shortcuts (?)"
+              >
+                <Zap className="w-5 h-5" />
+              </motion.button>
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -1243,63 +1357,216 @@ export default function EditorPage() {
             </motion.button>
             {/* Batch modal */}
             {batchModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center">
-                <div className="absolute inset-0 bg-black/60" onClick={() => setBatchModalOpen(false)} />
-                <div className="relative z-60 bg-[#02121b] border border-white/5 rounded-2xl p-6 w-[90%] max-w-2xl">
-                  <h3 className="text-lg font-semibold text-white mb-3">Select images to process</h3>
-                  <div className="mb-3 flex items-center gap-2">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center"
+              >
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !processing && setBatchModalOpen(false)} />
+                <motion.div 
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                  className="relative z-60 bg-gradient-to-br from-[#02121b] to-[#031B2F] border border-[#1A7CFF]/20 rounded-2xl p-6 w-[90%] max-w-3xl shadow-[0_0_50px_rgba(26,124,255,0.3)]"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-3 rounded-xl bg-linear-to-br from-[#1A7CFF]/20 to-[#A24BFF]/10">
+                      <FileArchive className="w-6 h-6 text-[#1A7CFF]" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-xl font-bold text-white">Batch Export</h3>
+                      <p className="text-sm text-[#9FB2C8]">Process multiple images at once</p>
+                    </div>
+                    <button
+                      onClick={() => !processing && setBatchModalOpen(false)}
+                      className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                      disabled={processing}
+                    >
+                      <X className="w-5 h-5 text-[#9FB2C8]" />
+                    </button>
+                  </div>
+                  
+                  <div className="mb-4 flex items-center gap-2">
                     <button
                       onClick={() => setSelectedIds(images.map(i => i.id))}
-                      className="px-3 py-1 rounded bg-[#0A2540] text-sm text-[#9FB2C8]"
-                    >Select All</button>
+                      className="px-4 py-2 rounded-lg bg-[#0A2540] text-sm text-[#F4F8FF] hover:bg-[#0F2F50] transition-colors font-medium"
+                    >Select All ({images.length})</button>
                     <button
                       onClick={() => setSelectedIds([])}
-                      className="px-3 py-1 rounded bg-[#0A2540] text-sm text-[#9FB2C8]"
+                      className="px-4 py-2 rounded-lg bg-[#0A2540] text-sm text-[#9FB2C8] hover:bg-[#0F2F50] transition-colors"
                     >Clear</button>
-                    <div className="ml-auto text-sm text-[#9FB2C8]">Progress: {batchProgress.done}/{batchProgress.total}</div>
+                    <div className="ml-auto text-sm text-[#1A7CFF] font-semibold">
+                      {selectedIds.length} selected
+                      {batchProgress.total > 0 && ` • Processing: ${batchProgress.done}/${batchProgress.total}`}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 max-h-60 overflow-auto mb-4">
+                  
+                  {/* Progress bar */}
+                  <AnimatePresence>
+                    {batchProgress.total > 0 && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="mb-4"
+                      >
+                        <div className="w-full h-3 bg-[#0A2540] rounded-full overflow-hidden shadow-inner">
+                          <motion.div 
+                            className="h-full bg-linear-to-r from-[#1A7CFF] via-[#6B46FF] to-[#A24BFF] shadow-[0_0_10px_rgba(26,124,255,0.5)]"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${(batchProgress.done / batchProgress.total) * 100}%` }}
+                            transition={{ duration: 0.3 }}
+                          />
+                        </div>
+                        <div className="text-xs text-[#9FB2C8] mt-1 text-center">
+                          {Math.round((batchProgress.done / batchProgress.total) * 100)}% Complete
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  
+                  <div className="grid grid-cols-3 gap-2 max-h-72 overflow-auto mb-5 pr-2 custom-scrollbar">
                     {images.map(img => (
-                      <label key={img.id} className="flex items-center gap-2 p-2 rounded hover:bg-[#071726]/60">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(img.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) setSelectedIds(prev => [...prev, img.id]);
-                            else setSelectedIds(prev => prev.filter(id => id !== img.id));
-                          }}
-                          className="w-4 h-4"
-                        />
-                        <img src={img.url} alt={img.file?.name || img.id} className="w-14 h-10 object-cover rounded" />
-                        <div className="text-sm text-[#9FB2C8] truncate">{img.file?.name || img.id}</div>
-                      </label>
+                      <motion.label 
+                        key={img.id} 
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className={`relative flex flex-col gap-2 p-3 rounded-xl transition-all cursor-pointer ${
+                          selectedIds.includes(img.id)
+                            ? 'bg-linear-to-br from-[#1A7CFF]/20 to-[#A24BFF]/10 border-2 border-[#1A7CFF] shadow-[0_0_15px_rgba(26,124,255,0.3)]'
+                            : 'bg-[#0A2540]/50 border-2 border-transparent hover:border-white/10'
+                        }`}
+                      >
+                        <div className="relative aspect-video rounded-lg overflow-hidden">
+                          <img src={img.url} alt={img.file?.name || img.id} className="w-full h-full object-cover" />
+                          <div className="absolute top-2 left-2">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(img.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) setSelectedIds(prev => [...prev, img.id]);
+                                else setSelectedIds(prev => prev.filter(id => id !== img.id));
+                              }}
+                              className="w-5 h-5 accent-[#1A7CFF] cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                        <div className="text-xs text-[#9FB2C8] truncate font-medium">{img.file?.name || img.id}</div>
+                      </motion.label>
                     ))}
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm text-[#9FB2C8]">Quality:</label>
-                      <select value={exportQuality} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setExportQuality(e.target.value as 'normal'|'standard'|'hd'|'ultra')} className="bg-[#0A2540] text-sm text-white px-2 py-1 rounded">
-                        <option value="normal">Normal</option>
-                        <option value="standard">Standard</option>
-                        <option value="hd">HD</option>
-                        <option value="ultra">Ultra</option>
+                  
+                  {/* Export Quality & Actions */}
+                  <div className="bg-[#0A2540]/30 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <Zap className="w-5 h-5 text-[#1A7CFF]" />
+                      <label className="text-sm font-medium text-[#F4F8FF]">Export Quality:</label>
+                      <select 
+                        value={exportQuality} 
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setExportQuality(e.target.value as 'normal'|'standard'|'hd'|'ultra')} 
+                        className="flex-1 bg-[#031B2F] text-sm text-white px-4 py-2 rounded-lg border border-[#1A7CFF]/30 outline-none focus:border-[#1A7CFF] transition-colors font-medium"
+                      >
+                        <option value="normal">📱 Normal (1280px) - Fast</option>
+                        <option value="standard">💻 Standard (1920px) - Balanced</option>
+                        <option value="hd">⭐ HD (2K) - Sharp & Clear</option>
+                        <option value="ultra">🏆 Ultra (4K) - Premium Quality</option>
                       </select>
                     </div>
-                    <div className="ml-auto flex items-center gap-2">
+                    
+                    <div className="flex items-center gap-2 pt-2 border-t border-white/5">
                       <button
-                        onClick={() => applyToSelected(selectedIds, exportQuality)}
+                        onClick={() => exportSelected(selectedIds, exportQuality, false)}
                         disabled={processing || selectedIds.length === 0}
-                        className="px-4 py-2 rounded-lg bg-linear-to-r from-[#1A7CFF] to-[#0D6EF5] text-white font-semibold"
-                      >Apply to selected</button>
+                        className="flex-1 px-4 py-3 rounded-lg bg-[#0A2540] text-white font-semibold hover:bg-[#0F2F50] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        Download Individual
+                      </button>
                       <button
-                        onClick={() => exportSelected(selectedIds, exportQuality)}
-                        disabled={processing || selectedIds.length === 0}
-                        className="px-4 py-2 rounded-lg bg-[#0A2540] text-white"
-                      >Export selected</button>
+                        onClick={() => exportSelected(selectedIds, exportQuality, true)}
+                        disabled={processing || selectedIds.length < 2}
+                        className="flex-1 px-4 py-3 rounded-lg bg-linear-to-r from-[#1A7CFF] to-[#6B46FF] text-white font-semibold hover:shadow-[0_0_20px_rgba(26,124,255,0.4)] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                      >
+                        <FileArchive className="w-4 h-4" />
+                        Download as ZIP
+                      </button>
                     </div>
                   </div>
-                </div>
-              </div>
+                </motion.div>
+              </motion.div>
+            )}
+            
+            {/* Keyboard Shortcuts Modal */}
+            {showShortcuts && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center"
+              >
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowShortcuts(false)} />
+                <motion.div 
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                  className="relative z-60 bg-gradient-to-br from-[#02121b] to-[#031B2F] border border-[#1A7CFF]/20 rounded-2xl p-6 w-[90%] max-w-2xl shadow-[0_0_50px_rgba(26,124,255,0.3)]"
+                >
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-3 rounded-xl bg-linear-to-br from-[#1A7CFF]/20 to-[#A24BFF]/10">
+                      <Zap className="w-6 h-6 text-[#1A7CFF]" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-xl font-bold text-white">Keyboard Shortcuts</h3>
+                      <p className="text-sm text-[#9FB2C8]">Work faster with professional shortcuts</p>
+                    </div>
+                    <button
+                      onClick={() => setShowShortcuts(false)}
+                      className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                    >
+                      <X className="w-5 h-5 text-[#9FB2C8]" />
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="bg-[#0A2540]/30 rounded-xl p-4 space-y-3">
+                      <h4 className="text-sm font-semibold text-[#1A7CFF] mb-3">General</h4>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-[#F4F8FF]">Show this help</span>
+                        <kbd className="px-3 py-1 rounded-lg bg-[#031B2F] border border-[#1A7CFF]/30 text-xs font-mono text-[#1A7CFF]">?</kbd>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-[#F4F8FF]">Close modal / Exit</span>
+                        <kbd className="px-3 py-1 rounded-lg bg-[#031B2F] border border-[#1A7CFF]/30 text-xs font-mono text-[#1A7CFF]">Esc</kbd>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-[#0A2540]/30 rounded-xl p-4 space-y-3">
+                      <h4 className="text-sm font-semibold text-[#1A7CFF] mb-3">Editing</h4>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-[#F4F8FF]">Undo placement</span>
+                        <kbd className="px-3 py-1 rounded-lg bg-[#031B2F] border border-[#1A7CFF]/30 text-xs font-mono text-[#1A7CFF]">Ctrl + Z</kbd>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-[#0A2540]/30 rounded-xl p-4 space-y-3">
+                      <h4 className="text-sm font-semibold text-[#1A7CFF] mb-3">Export</h4>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-[#F4F8FF]">Export current image</span>
+                        <kbd className="px-3 py-1 rounded-lg bg-[#031B2F] border border-[#1A7CFF]/30 text-xs font-mono text-[#1A7CFF]">Ctrl + E</kbd>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-[#F4F8FF]">Batch export</span>
+                        <kbd className="px-3 py-1 rounded-lg bg-[#031B2F] border border-[#1A7CFF]/30 text-xs font-mono text-[#1A7CFF]">Ctrl + B</kbd>
+                      </div>
+                    </div>
+                    
+                    <div className="text-xs text-[#9FB2C8] text-center pt-2">
+                      <kbd className="text-[#1A7CFF]">Ctrl</kbd> is <kbd className="text-[#1A7CFF]">⌘ Cmd</kbd> on Mac
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
             )}
           </div>
         </div>

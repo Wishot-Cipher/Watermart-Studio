@@ -170,10 +170,22 @@ export async function renderWatermark(
 
         // Global safety cap: prevent exported images from being excessively large
         // (some users report very large downloads from HD/Ultra upscaling). This
-        // enforces an upper bound while preserving aspect ratio. Use a lower cap
-        // on mobile devices to avoid high CPU / memory usage.
+        // enforces an upper bound while preserving aspect ratio. For HD/Ultra exports,
+        // we allow much higher resolution to deliver professional quality.
         const isMobile = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-        const GLOBAL_MAX_EXPORT_DIMENSION = isMobile ? 1200 : 1600; // px - cap export largest dimension
+        let GLOBAL_MAX_EXPORT_DIMENSION: number;
+        
+        if (qualityKey === 'ultra') {
+          // Ultra quality: no cap, use full resolution up to 4K
+          GLOBAL_MAX_EXPORT_DIMENSION = 4096;
+        } else if (qualityKey === 'hd') {
+          // HD quality: cap at 2K for safety but allow high resolution
+          GLOBAL_MAX_EXPORT_DIMENSION = 2560;
+        } else {
+          // Normal/Standard: modest cap to avoid large downloads
+          GLOBAL_MAX_EXPORT_DIMENSION = isMobile ? 1280 : 1920;
+        }
+        
         const finalLargest = Math.max(width, height);
         if (finalLargest > GLOBAL_MAX_EXPORT_DIMENSION) {
           const gscale = GLOBAL_MAX_EXPORT_DIMENSION / finalLargest;

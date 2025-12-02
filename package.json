@@ -16,6 +16,7 @@
     "@tensorflow-models/blazeface": "^0.0.7",
     "@tensorflow/tfjs": "^3.1.0",
     "@tensorflow/tfjs-converter": "^3.1.0",
+    "@types/jszip": "^3.4.0",
     "browser-image-compression": "^2.0.2",
     "canvas-filters": "^1.0.1",
     "class-variance-authority": "^0.7.1",

@@ -681,6 +681,8 @@ export default function EnhancedWatermarkControls({
                 >
                   <Slider label="Highlights" value={adjustments.highlights} onChange={(v: number) => setAdjustments({ ...adjustments, highlights: v })} icon={Sun} min={-100} max={100} />
                   <Slider label="Shadows" value={adjustments.shadows} onChange={(v: number) => setAdjustments({ ...adjustments, shadows: v })} icon={Moon} min={-100} max={100} />
+                  <Slider label="Whites" value={adjustments.whites} onChange={(v: number) => setAdjustments({ ...adjustments, whites: v })} icon={Sun} min={-100} max={100} />
+                  <Slider label="Blacks" value={adjustments.blacks} onChange={(v: number) => setAdjustments({ ...adjustments, blacks: v })} icon={Moon} min={-100} max={100} />
                   <Slider label="Clarity" value={adjustments.clarity} onChange={(v: number) => setAdjustments({ ...adjustments, clarity: v })} icon={Aperture} min={-100} max={100} />
                   <Slider label="Sharpen" value={adjustments.sharpen} onChange={(v: number) => setAdjustments({ ...adjustments, sharpen: v })} icon={Scissors} min={0} max={100} />
                 </motion.div>
