@@ -1,0 +1,39 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1A7CFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0D5FCC;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" fill="url(#bgGradient)"/>
+  
+  <!-- Maskable safe zone - white rounded rectangle -->
+  <rect x="77" y="77" width="358" height="358" rx="60" fill="rgba(255, 255, 255, 0.95)"/>
+  
+  <!-- Water drop icon -->
+  <g transform="translate(256, 256)">
+    <!-- Main drop shape -->
+    <path d="M 0,-90 
+             C 30,-70 50,0 0,90 
+             C -50,0 -30,-70 0,-90 Z" 
+          fill="#1A7CFF" 
+          filter="url(#shadow)"/>
+    
+    <!-- Highlight -->
+    <circle cx="-12" cy="-25" r="15" fill="rgba(255, 255, 255, 0.4)"/>
+    
+    <!-- W letter -->
+    <text x="0" y="10" 
+          font-family="Inter, Arial, sans-serif" 
+          font-size="100" 
+          font-weight="bold" 
+          fill="white" 
+          text-anchor="middle" 
+          dominant-baseline="middle">W</text>
+  </g>
+</svg>

@@ -45,6 +45,29 @@ export interface WatermarkConfig {
   gradientTo?: string;
   strokeWidth?: number;
   strokeColor?: string;
+  
+  // Professional typography
+  letterSpacing?: number;
+  lineHeight?: number;
+  textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
+  
+  // Advanced shadow controls
+  shadowBlur?: number;
+  shadowOffsetX?: number;
+  shadowOffsetY?: number;
+  shadowColor?: string;
+  
+  // Advanced glow controls
+  glowIntensity?: number;
+  glowColor?: string;
+  
+  // Pattern controls
+  pattern?: 'none' | 'tiled' | 'diagonal' | 'grid' | 'scattered' | 'border';
+  patternSpacing?: number;
+  patternOpacity?: number;
+  
+  // Preset
+  preset?: string;
 }
 
 // Enhanced image adjustments with professional controls
@@ -132,9 +155,9 @@ export const DEFAULT_ADJUSTMENTS: ImageAdjustments = {
 };
 
 export const EXPORT_QUALITY_SETTINGS = {
-  normal: { quality: 0.75, maxDimension: 1280 },
-  standard: { quality: 0.85, maxDimension: 1920 },
-  // Canva-like targets: keep HD and Ultra modest to avoid huge downloads
-  hd: { quality: 0.87, maxDimension: 2036 },
-  ultra: { quality: 1.0, maxDimension: 2548 }
+  normal: { quality: 0.85, maxDimension: 1280 },
+  standard: { quality: 0.92, maxDimension: 1920 },
+  // Professional quality: HD and Ultra use maximum quality for pristine results
+  hd: { quality: 1.0, maxDimension: 2560 },
+  ultra: { quality: 1.0, maxDimension: 4096 }
 };

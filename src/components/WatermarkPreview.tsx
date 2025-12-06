@@ -40,6 +40,28 @@ type Props = {
   strokeWidth?: number
   strokeColor?: string
   flushRef?: React.MutableRefObject<(() => void) | null>
+  
+  // Professional Typography
+  letterSpacing?: number
+  lineHeight?: number
+  textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize'
+  
+  // Advanced Effects
+  shadowIntensity?: number
+  shadowBlur?: number
+  shadowOffsetX?: number
+  shadowOffsetY?: number
+  shadowColor?: string
+  glowIntensity?: number
+  glowColor?: string
+  
+  // Pattern
+  pattern?: 'none' | 'tiled' | 'diagonal' | 'grid' | 'scattered' | 'border'
+  patternSpacing?: number
+  
+  // Gradient
+  gradientFrom?: string
+  gradientTo?: string
 }
 
 // Professional style mappings
@@ -146,7 +168,26 @@ export default function WatermarkPreview(props: Props) {
     rotation,
     strokeWidth,
     strokeColor
-    , flushRef
+    , flushRef,
+    // Professional Typography
+    letterSpacing,
+    lineHeight,
+    textTransform,
+    
+    // Advanced Effects
+    shadowIntensity,
+    shadowBlur,
+    shadowOffsetX,
+    shadowOffsetY,
+    shadowColor,
+    
+    // Pattern
+    pattern,
+    patternSpacing,
+    
+    // Gradient
+    gradientFrom,
+    gradientTo
   } = props
 
   useEffect(() => {
@@ -308,6 +349,86 @@ export default function WatermarkPreview(props: Props) {
     }
   }
 
+  const getTextStyle = () => {
+    const base: React.CSSProperties = {
+      fontSize: `${previewFontPx}px`,
+      fontFamily: previewFontMap[fontFamily] || previewFontMap.inter,
+      fontWeight: Number(fontWeightState),
+      lineHeight: lineHeight || 1.2,
+      letterSpacing: letterSpacing ? `${letterSpacing}em` : undefined,
+      textTransform: (textTransform as any) || 'none',
+      color: previewColor,
+    };
+
+    if (gradientFrom && gradientTo) {
+      base.backgroundImage = `linear-gradient(to right, ${gradientFrom}, ${gradientTo})`;
+      base.WebkitBackgroundClip = 'text';
+      base.WebkitTextFillColor = 'transparent';
+      base.backgroundClip = 'text';
+      base.color = 'transparent';
+    }
+
+    if (shadowIntensity && shadowIntensity > 0) {
+      const blur = shadowBlur || 0;
+      const offX = shadowOffsetX || 2;
+      const offY = shadowOffsetY || 2;
+      const color = shadowColor || 'rgba(0,0,0,0.5)';
+      base.textShadow = `${offX}px ${offY}px ${blur}px ${color}`;
+    } else if (textShadow) {
+      base.filter = textShadow;
+    }
+
+    return base;
+  };
+
+  const renderWatermarkContent = () => (
+    <div 
+      className={`${styleConfig.bg} ${styleConfig.border} ${styleConfig.radius} ${styleConfig.padding} transition-all duration-200`}
+      style={{ 
+        boxShadow: getBoxShadow()
+      }}
+    >
+      <div
+        className={`flex items-center gap-3 ${textEffects}`}
+        style={getTextStyle()}
+      >
+        {(watermarkType === 'text' || watermarkType === 'both') && (
+          <span style={{
+            color: 'inherit',
+            WebkitTextFillColor: 'inherit',
+            backgroundClip: 'inherit',
+            backgroundImage: 'inherit',
+            fontWeight: Number(fontWeightState),
+            WebkitTextStroke: (strokeWidth && strokeWidth > 0) ? `${strokeWidth}px ${strokeColor || '#000'}` : undefined,
+            textShadow: (shadowIntensity && shadowIntensity > 0) ? undefined : ((strokeWidth && strokeWidth > 0) ? `-1px -1px 0 ${strokeColor || '#000'}, 1px -1px 0 ${strokeColor || '#000'}, -1px 1px 0 ${strokeColor || '#000'}, 1px 1px 0 ${strokeColor || '#000'}` : undefined)
+          }}>
+            {watermarkText}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
+  if (pattern && pattern !== 'none') {
+    const isDiagonal = pattern === 'diagonal';
+    const gap = patternSpacing ? Math.max(10, patternSpacing * 2) : 48;
+    return (
+      <div 
+        className="absolute inset-0 z-30 overflow-hidden pointer-events-none flex flex-wrap content-center justify-center" 
+        style={{ 
+          opacity: opacity / 100,
+          gap: `${gap}px`
+        }}
+      >
+         {Array.from({ length: 12 }).map((_, i) => (
+            <div key={i} className={`transform ${isDiagonal ? '-rotate-45' : ''} scale-90`}>
+               {renderWatermarkContent()}
+            </div>
+         ))}
+      </div>
+    );
+  }
+
   return (
     <AnimatePresence>
       {watermarkType !== 'none' && (
@@ -361,36 +482,7 @@ export default function WatermarkPreview(props: Props) {
               touchAction: 'none'
             }}
         >
-          <div 
-            className={`${styleConfig.bg} ${styleConfig.border} ${styleConfig.radius} ${styleConfig.padding} transition-all duration-200`}
-            style={{ 
-              boxShadow: getBoxShadow()
-            }}
-          >
-            <div
-              className={`flex items-center gap-3 ${textEffects}`}
-              style={{ 
-                fontSize: `${previewFontPx}px`, 
-                fontFamily: previewFontMap[fontFamily] || previewFontMap.inter, 
-                color: previewColor, 
-                fontWeight: Number(fontWeightState),
-                filter: textShadow,
-                lineHeight: 1.2
-              }}
-            >
-              {/* Text */}
-              {(watermarkType === 'text' || watermarkType === 'both') && (
-                <span style={{
-                  color: previewColor,
-                  fontWeight: Number(fontWeightState),
-                  WebkitTextStroke: (strokeWidth && strokeWidth > 0) ? `${strokeWidth}px ${strokeColor || '#000'}` : undefined,
-                  textShadow: (strokeWidth && strokeWidth > 0) ? `-1px -1px 0 ${strokeColor || '#000'}, 1px -1px 0 ${strokeColor || '#000'}, -1px 1px 0 ${strokeColor || '#000'}, 1px 1px 0 ${strokeColor || '#000'}` : undefined
-                }}>
-                  {watermarkText}
-                </span>
-              )}
-            </div>
-          </div>
+          {renderWatermarkContent()}
         
           {/* Render logos as absolute overlays relative to the image container (not inside watermark box) */}
           {(watermarkType === 'logo' || watermarkType === 'both') && logos && logos.length > 0 && logos.map((l, i) => {

@@ -1,478 +1,215 @@
-import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+﻿import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useImages } from '../contexts/ImagesContext';
+import { LazyMotion, domAnimation, m, AnimatePresence } from 'framer-motion';
 import {
-  Upload,
-  Image,
-  Sparkles,
-  Clock,
-  Zap,
-  ChevronRight,
-  Plus,
-  Star,
-  TrendingUp,
-  Folder,
-  BarChart3,
-  Settings,
-  Bell,
-  Search,
-  X,
-  Check
+  Upload, Image as ImageIcon, Sparkles, Layers, Zap, 
+   ArrowRight, CheckCircle2, X,
+  Wand2, Grid3X3
 } from 'lucide-react';
+import { useImages } from '@/contexts/ImagesContext';
 
-export default function HomePage() {
-  const [isDragging, setIsDragging] = useState(false);
-  const [showUploadSuccess, setShowUploadSuccess] = useState(false);
-  const { images, addImages, setSelectIndex } = useImages();
+export default function Home() {
   const navigate = useNavigate();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const { images, addImages, clear } = useImages();
+  const [isDragging, setIsDragging] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
-  const recentBatches = [
-    { id: 1, name: 'Youth Summit 2025', images: 124, date: '2 hours ago', status: 'completed' },
-    { id: 2, name: 'Product Catalog', images: 89, date: '1 day ago', status: 'completed' },
-    { id: 3, name: 'Event Photos', images: 256, date: '3 days ago', status: 'completed' },
-  ];
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
 
-  const savedWatermarks = [
-    { id: 1, name: 'Corporate', uses: '1.2k', type: 'text', emoji: '🏢' },
-    { id: 2, name: 'Logo Dark', uses: '856', type: 'logo', emoji: '🎨' },
-    { id: 3, name: 'Minimal', uses: '2.1k', type: 'text', emoji: '✨' },
-    { id: 4, name: 'Vintage', uses: '634', type: 'logo', emoji: '📷' },
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    if (files.length > 0) {
+      addImages(files);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    }
+  }, [addImages]);
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'));
+    if (files.length > 0) {
+      addImages(files);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    }
+  }, [addImages]);
+
+  const features = [
+    { icon: Layers, title: 'Multi-Layer', desc: 'Stack logos & text', color: '#22d3ee' },
+    { icon: Sparkles, title: 'AI Placement', desc: 'Smart positioning', color: '#a855f7' },
+    { icon: Zap, title: 'Batch Process', desc: 'Process 100s at once', color: '#10b981' },
+    { icon: Wand2, title: 'Pro Effects', desc: '12+ stunning styles', color: '#f97316' },
   ];
 
   const stats = [
-    { label: 'Images Processed', value: '2,847', icon: Image, color: '#1A7CFF', trend: '+12.5%' },
-    { label: 'Time Saved', value: '43h', icon: Clock, color: '#18E2FF', trend: '+8.3%' },
-    { label: 'Active Templates', value: '12', icon: Sparkles, color: '#A24BFF', trend: '+3' },
+    { label: 'Images', value: images.length, icon: ImageIcon, color: '#22d3ee' },
+    { label: 'Styles', value: '12+', icon: Sparkles, color: '#a855f7' },
+    { label: 'Batch', value: '500', icon: Grid3X3, color: '#10b981' },
   ];
 
-  const handleFilesAdded = async (files: File[]) => {
-    const imageFiles = files.filter(file => file.type.startsWith('image/'));
-    
-    if (imageFiles.length === 0) {
-      alert('Please select valid image files');
-      return;
-    }
-
-    await addImages(imageFiles);
-    setShowUploadSuccess(true);
-    setTimeout(() => setShowUploadSuccess(false), 3000);
-  };
-
-  const handleEditAll = () => {
-    if (images.length === 0) {
-      alert('Please upload images first');
-      return;
-    }
-    setSelectIndex(0);
-    navigate('/editor');
-  };
-
-  const handleEditImage = (index: number) => {
-    setSelectIndex(index);
-    navigate('/editor');
-  };
-
   return (
-    <div className="min-h-screen relative overflow-hidden bg-[#000913]">
-      {/* Animated Background */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#1A7CFF]/10 rounded-full blur-3xl animate-pulse-slow" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-[#A24BFF]/10 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: '1s' }} />
-      </div>
-
-      {/* Success Toast */}
-      <AnimatePresence>
-        {showUploadSuccess && (
-          <motion.div
-            initial={{ opacity: 0, y: -50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -50 }}
-            className="fixed top-6 right-6 z-50 bg-[#031B2F]/95 backdrop-blur-xl border border-[#10D98E]/30 rounded-2xl p-4 shadow-[0_0_40px_rgba(16,217,142,0.3)]"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-[#10D98E]/20">
-                <Check className="w-5 h-5 text-[#10D98E]" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-[#F4F8FF]">Images Uploaded Successfully!</p>
-                <p className="text-xs text-[#9FB2C8]">{images.length} image{images.length !== 1 ? 's' : ''} ready to edit</p>
-              </div>
-              <button
-                onClick={() => setShowUploadSuccess(false)}
-                className="ml-4 p-1 hover:bg-white/10 rounded-lg transition-colors"
-              >
-                <X className="w-4 h-4 text-[#9FB2C8]" />
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Top Navigation */}
-      <motion.nav
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative z-20 bg-[#031B2F]/50 backdrop-blur-xl border-b border-white/5"
-      >
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-12 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-8">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-linear-to-br from-[#1A7CFF] to-[#A24BFF] flex items-center justify-center shadow-[0_0_20px_rgba(26,124,255,0.4)]">
-                  <Sparkles className="w-6 h-6 text-white" />
-                </div>
-                <span className="text-xl font-bold text-[#F4F8FF]">WaterMark Studio</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="hidden lg:flex items-center gap-3 px-4 py-2 rounded-xl bg-[#0A2540]/50 border border-white/5">
-                <Search className="w-4 h-4 text-[#9FB2C8]" />
-                <input
-                  type="text"
-                  placeholder="Search templates..."
-                  className="bg-transparent border-none outline-none text-sm text-[#F4F8FF] placeholder:text-[#9FB2C8] w-64"
-                />
-              </div>
-              <button className="p-2.5 rounded-xl bg-[#0A2540]/50 hover:bg-[#0F2F50] border border-white/5 transition-colors">
-                <Bell className="w-5 h-5 text-[#9FB2C8]" />
-              </button>
-              <button className="p-2.5 rounded-xl bg-[#0A2540]/50 hover:bg-[#0F2F50] border border-white/5 transition-colors">
-                <Settings className="w-5 h-5 text-[#9FB2C8]" />
-              </button>
-            </div>
-          </div>
+    <LazyMotion features={domAnimation}>
+      <div className="min-h-screen bg-[#080b12] text-white overflow-x-hidden">
+        <div className="fixed inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#151c28_0%,#080b12_60%)]" />
+          <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-cyan-500/8 rounded-full blur-[150px] animate-pulse" />
+          <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-purple-600/8 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }} />
         </div>
-      </motion.nav>
 
-      {/* Main Content */}
-      <div className="relative z-10">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-12 py-8 lg:py-12">
-          
-          {/* Header Section */}
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="mb-10"
-          >
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-              <div>
-                <h1 className="text-4xl lg:text-5xl font-bold text-[#F4F8FF] mb-3">
-                  Welcome back, <span className="bg-linear-to-r from-[#1A7CFF] to-[#A24BFF] bg-clip-text text-transparent">Media Team</span>
-                </h1>
-                <p className="text-lg text-[#9FB2C8]">Transform your images with professional watermarks in seconds</p>
-              </div>
+        <div className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+          <m.div initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
+            <m.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-linear-to-r from-cyan-500/20 to-purple-600/20 border border-cyan-500/30 mb-6">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-sm font-medium bg-linear-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">Professional Watermark Studio</span>
+            </m.div>
+            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold mb-6">
+              <span className="bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">Watermark</span><br/>
+              <span className="bg-linear-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">Studio Pro</span>
+            </h1>
+            <p className="text-base text-slate-400 max-w-2xl mx-auto">Professional watermarking with AI placement, batch processing, and stunning effects</p>
+          </m.div>
 
-                <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="hidden lg:flex items-center gap-2 px-6 py-3 rounded-xl bg-linear-to-r from-[#1A7CFF] to-[#0D6EF5] text-white font-semibold shadow-[0_0_30px_rgba(26,124,255,0.4)] whitespace-nowrap"
-              >
-                <Zap className="w-5 h-5" />
-                Upgrade to Pro
-              </motion.button>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {stats.map((stat, index) => (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 * index, duration: 0.5 }}
-                  className="relative group"
-                >
-                  <div className="absolute inset-0 bg-linear-to-br from-[#1A7CFF]/20 to-[#A24BFF]/10 rounded-2xl blur-xl opacity-50 group-hover:opacity-70 transition-opacity duration-300" />
-                  <div className="relative bg-[#031B2F]/80 backdrop-blur-xl border border-white/10 group-hover:border-[#1A7CFF]/30 rounded-2xl p-6 transition-all duration-300">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="p-3 rounded-xl bg-linear-to-br from-[#1A7CFF]/20 to-transparent">
-                        <stat.icon className="w-6 h-6" style={{ color: stat.color }} />
-                      </div>
-                      <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#10D98E]/10">
-                        <TrendingUp className="w-3 h-3 text-[#10D98E]" />
-                        <span className="text-xs font-semibold text-[#10D98E]">{stat.trend}</span>
-                      </div>
-                    </div>
-                    <div className="text-3xl font-bold text-[#F4F8FF] mb-1">{stat.value}</div>
-                    <div className="text-sm text-[#9FB2C8]">{stat.label}</div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Upload Section */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.3, duration: 0.5 }}
-            className="mb-10"
-          >
-            <div
-              className={`relative group cursor-pointer transition-all duration-300 ${
-                isDragging ? 'scale-[1.02]' : 'hover:scale-[1.005]'
-              }`}
-              onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={async (e) => {
-                e.preventDefault();
-                setIsDragging(false);
-                const files = e.dataTransfer?.files ? Array.from(e.dataTransfer.files) : [];
-                if (files.length) await handleFilesAdded(files);
-              }}
-            >
-              <div className="absolute inset-0 bg-linear-to-br from-[#1A7CFF] to-[#A24BFF] rounded-3xl blur-3xl opacity-20 group-hover:opacity-30 transition-opacity duration-300" />
-              <div className={`relative bg-linear-to-br from-[#0A2540]/90 to-[#031B2F]/90 backdrop-blur-xl border-2 ${
-                isDragging ? 'border-[#1A7CFF] bg-[#1A7CFF]/5' : 'border-dashed border-[#1A7CFF]/30'
-              } rounded-3xl p-12 lg:p-20 transition-all duration-300`}>
-                <div className="flex flex-col items-center text-center space-y-6">
-                  <motion.div
-                    animate={{ y: isDragging ? -10 : [0, -10, 0] }}
-                    transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
-                    className="relative"
-                  >
-                    <div className="absolute inset-0 bg-linear-to-br from-[#1A7CFF] to-[#A24BFF] rounded-3xl blur-2xl opacity-60" />
-                    <div className="relative bg-linear-to-br from-[#1A7CFF] to-[#A24BFF] p-8 rounded-3xl shadow-[0_0_60px_rgba(26,124,255,0.4)]">
-                      <Upload className="w-16 h-16 text-white" />
-                    </div>
-                  </motion.div>
-
-                  <div className="max-w-2xl">
-                    <h3 className="text-3xl font-bold text-[#F4F8FF] mb-3">
-                      {isDragging ? 'Drop your images here' : 'Upload Your Images'}
-                    </h3>
-                    <p className="text-base text-[#9FB2C8] mb-8">
-                      Drag & drop your images or click to browse • Supports JPG, PNG, WebP, and more
-                    </p>
-
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="px-10 py-4 rounded-2xl bg-linear-to-r from-[#1A7CFF] to-[#0D6EF5] text-white text-lg font-semibold shadow-[0_0_40px_rgba(26,124,255,0.5)] hover:shadow-[0_0_60px_rgba(26,124,255,0.7)] transition-all duration-300"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      Choose Files
-                    </motion.button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={async (e) => {
-                        const files = e.target.files ? Array.from(e.target.files) : [];
-                        if (files.length) await handleFilesAdded(files);
-                      }}
-                      className="hidden"
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-[#9FB2C8]">
-                    <div className="flex items-center gap-2">
-                      <Zap className="w-4 h-4 text-[#18E2FF]" />
-                      <span>Batch Processing</span>
-                    </div>
-                    <div className="w-1 h-1 rounded-full bg-[#9FB2C8]" />
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-[#A24BFF]" />
-                      <span>AI-Powered</span>
-                    </div>
-                    <div className="w-1 h-1 rounded-full bg-[#9FB2C8]" />
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-[#10D98E]" />
-                      <span>Lightning Fast</span>
-                    </div>
+          <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="grid grid-cols-3 gap-3 mb-10">
+            {stats.map((stat, i) => (
+              <m.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 + i * 0.1 }}
+                className="relative bg-[#0d1219]/80 backdrop-blur-xl border border-white/5 rounded-2xl p-4 sm:p-6 hover:border-white/10 transition-all">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 rounded-xl" style={{ backgroundColor: stat.color + '20' }}>
+                    <stat.icon className="w-5 h-5" style={{ color: stat.color }} />
                   </div>
                 </div>
-              </div>
-            </div>
-          </motion.div>
+                <div className="text-2xl sm:text-3xl font-bold text-white mb-1">{stat.value}</div>
+                <div className="text-xs sm:text-sm text-slate-400">{stat.label}</div>
+              </m.div>
+            ))}
+          </m.div>
 
-          {/* Uploaded Images Preview */}
+          <m.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 }} className="relative mb-12">
+            <div className="absolute -inset-1 bg-linear-to-r from-cyan-500/20 via-purple-600/15 to-cyan-500/20 rounded-3xl blur-2xl opacity-60" />
+            <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+              className={`relative bg-[#0d1219]/90 backdrop-blur-xl border-2 border-dashed rounded-3xl p-8 sm:p-12 text-center transition-all cursor-pointer ${isDragging ? 'border-cyan-500 bg-cyan-500/10 scale-[1.01]' : 'border-white/10 hover:border-cyan-500/50'}`}>
+              <input type="file" accept="image/*" multiple onChange={handleFileSelect} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+              <m.div animate={{ y: isDragging ? -10 : 0 }} className="relative flex flex-col items-center">
+                <m.div animate={{ scale: isDragging ? 1.1 : 1 }} className="relative mb-6">
+                  <div className="absolute inset-0 bg-linear-to-br from-cyan-500 to-purple-600 rounded-2xl blur-xl opacity-50" />
+                  <div className="relative w-20 h-20 rounded-2xl bg-linear-to-br from-cyan-500 to-purple-600 flex items-center justify-center shadow-2xl shadow-cyan-500/25">
+                    <Upload className="w-10 h-10 text-white" />
+                  </div>
+                </m.div>
+                <h3 className="text-xl sm:text-2xl font-bold text-white mb-3">{isDragging ? 'Drop here' : 'Upload Images'}</h3>
+                <p className="text-slate-400 mb-4 text-sm">Drag & drop or click  PNG, JPG, WebP</p>
+              </m.div>
+            </div>
+          </m.div>
+
           <AnimatePresence>
-            {images && images.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="mb-10"
-              >
-                <div className="relative">
-                  <div className="absolute inset-0 bg-linear-to-br from-[#1A7CFF]/10 to-[#A24BFF]/5 rounded-3xl blur-2xl" />
-                  <div className="relative bg-[#031B2F]/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
-                    <div className="flex items-center justify-between mb-6">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl bg-linear-to-br from-[#10D98E]/20 to-transparent">
-                          <Check className="w-5 h-5 text-[#10D98E]" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-semibold text-[#F4F8FF]">
-                            Ready to Edit
-                          </h3>
-                          <p className="text-sm text-[#9FB2C8]">{images.length} image{images.length !== 1 ? 's' : ''} uploaded</p>
-                        </div>
-                      </div>
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="px-6 py-3 rounded-xl bg-linear-to-r from-[#1A7CFF] to-[#0D6EF5] text-white font-semibold shadow-[0_0_20px_rgba(26,124,255,0.4)] flex items-center gap-2"
-                        onClick={handleEditAll}
-                      >
-                        <Sparkles className="w-4 h-4" />
-                        Edit All Images
-                        <ChevronRight className="w-4 h-4" />
-                      </motion.button>
-                    </div>
-                    
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                      {images.map((img: { id: React.Key | null | undefined; url: string | undefined; }, idx: number) => (
-                        <motion.button
-                          key={img.id}
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: idx * 0.05 }}
-                          whileHover={{ scale: 1.05, y: -4 }}
-                          onClick={() => handleEditImage(idx)}
-                          className="relative aspect-square overflow-hidden bg-[#0A2540]/50 border border-white/5 hover:border-[#1A7CFF]/50 rounded-2xl transition-all duration-300 group"
-                        >
-                          <img src={img.url} alt={`upload-${idx}`} className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                            <div className="absolute bottom-2 left-2 right-2">
-                              <div className="text-xs text-white font-semibold mb-1">Image #{idx + 1}</div>
-                              <div className="flex items-center gap-1">
-                                <div className="flex-1 h-1 bg-white/20 rounded-full overflow-hidden">
-                                  <div className="h-full bg-[#1A7CFF] rounded-full" style={{ width: '100%' }} />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="p-1.5 rounded-lg bg-[#1A7CFF] shadow-lg">
-                              <Sparkles className="w-3 h-3 text-white" />
-                            </div>
-                          </div>
-                        </motion.button>
-                      ))}
-                    </div>
+            {images.length > 0 && (
+              <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mb-12">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Your Images</h2>
+                    <p className="text-slate-400 text-sm">{images.length} ready</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <m.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => clear()}
+                      className="px-4 py-2 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-400 text-sm font-medium">Clear</m.button>
+                    <m.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => navigate('/editor')}
+                      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-linear-to-r from-cyan-500 to-purple-600 text-white font-semibold shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-shadow">
+                      <Wand2 className="w-4 h-4" />Open Editor<ArrowRight className="w-4 h-4" />
+                    </m.button>
                   </div>
                 </div>
-              </motion.div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {images.slice(0, 11).map((img, i) => (
+                    <m.div key={img.id} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.03 }}
+                      className="relative group aspect-square rounded-xl overflow-hidden bg-slate-900 border border-white/5 hover:border-cyan-500/50">
+                      <img src={img.url} alt={img.file?.name || 'Image'} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                    </m.div>
+                  ))}
+                  {images.length > 11 && (
+                    <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => navigate('/editor')}
+                      className="aspect-square rounded-xl bg-linear-to-br from-cyan-500/20 to-purple-600/20 border border-white/5 flex items-center justify-center cursor-pointer hover:border-cyan-500/30 transition-colors">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold bg-linear-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">+{images.length - 11}</div>
+                        <div className="text-sm text-slate-400">more</div>
+                      </div>
+                    </m.div>
+                  )}
+                </div>
+              </m.div>
             )}
           </AnimatePresence>
 
-          {/* Content Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* Recent Batches */}
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.4, duration: 0.5 }}
-              className="lg:col-span-2"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-linear-to-br from-[#1A7CFF]/20 to-transparent">
-                    <Folder className="w-5 h-5 text-[#1A7CFF]" />
+          <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-white mb-3">Powerful Features</h2>
+              <p className="text-slate-400">Everything for professional watermarking</p>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {features.map((feature, i) => (
+                <m.div key={feature.title} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 + i * 0.1 }}
+                  className="relative bg-[#0d1219]/80 backdrop-blur-xl border border-white/5 rounded-2xl p-6 hover:border-white/10 transition-all">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ backgroundColor: feature.color + '20' }}>
+                    <feature.icon className="w-6 h-6" style={{ color: feature.color }} />
                   </div>
-                  <h2 className="text-2xl font-bold text-[#F4F8FF]">Recent Batches</h2>
-                </div>
-                <button className="flex items-center gap-2 text-sm text-[#1A7CFF] hover:text-[#0D6EF5] font-medium transition-colors">
-                  View All
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                {recentBatches.map((batch, index) => (
-                  <motion.div
-                    key={batch.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.5 + index * 0.1, duration: 0.4 }}
-                    whileHover={{ scale: 1.01 }}
-                    className="group cursor-pointer"
-                  >
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-linear-to-r from-[#1A7CFF]/10 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                      <div className="relative bg-[#031B2F]/60 backdrop-blur-xl border border-white/5 group-hover:border-[#1A7CFF]/30 rounded-2xl p-5 transition-all duration-300">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className="p-3 rounded-xl bg-linear-to-br from-[#1A7CFF]/20 to-transparent">
-                              <Image className="w-5 h-5 text-[#1A7CFF]" />
-                            </div>
-                            <div>
-                              <h3 className="text-lg font-semibold text-[#F4F8FF] mb-1">{batch.name}</h3>
-                              <div className="flex items-center gap-3 text-sm text-[#9FB2C8]">
-                                <span>{batch.images} images</span>
-                                <span>•</span>
-                                <span>{batch.date}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <ChevronRight className="w-5 h-5 text-[#9FB2C8] group-hover:text-[#1A7CFF] transition-colors" />
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* Templates */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.5, duration: 0.5 }}
-            >
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-linear-to-br from-[#A24BFF]/20 to-transparent">
-                    <BarChart3 className="w-5 h-5 text-[#A24BFF]" />
-                  </div>
-                  <h2 className="text-2xl font-bold text-[#F4F8FF]">Templates</h2>
-                </div>
-                <button className="p-2 rounded-xl bg-linear-to-br from-[#1A7CFF]/20 to-transparent hover:from-[#1A7CFF]/30 transition-all">
-                  <Plus className="w-5 h-5 text-[#1A7CFF]" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                {savedWatermarks.map((watermark, index) => (
-                  <motion.div
-                    key={watermark.id}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.6 + index * 0.1, duration: 0.4 }}
-                    whileHover={{ scale: 1.05 }}
-                    className="group cursor-pointer"
-                  >
-                    <div className="relative aspect-square">
-                      <div className="absolute inset-0 bg-linear-to-br from-[#1A7CFF]/20 to-[#A24BFF]/10 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                      <div className="relative h-full bg-[#031B2F]/60 backdrop-blur-xl border border-white/5 group-hover:border-[#1A7CFF]/30 rounded-2xl p-4 transition-all duration-300">
-                        <div className="h-full flex flex-col items-center justify-center">
-                          <div className="text-4xl mb-3">{watermark.emoji}</div>
-                          <div className="text-center">
-                            <div className="text-sm font-semibold text-[#F4F8FF] mb-1">{watermark.name}</div>
-                            <div className="flex items-center justify-center gap-1 text-xs text-[#9FB2C8]">
-                              <Star className="w-3 h-3 fill-[#FFB020] text-[#FFB020]" />
-                              {watermark.uses} uses
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-          </div>
+                  <h3 className="text-lg font-semibold text-white mb-2">{feature.title}</h3>
+                  <p className="text-sm text-slate-400">{feature.desc}</p>
+                </m.div>
+              ))}
+            </div>
+          </m.div>
         </div>
+
+        <AnimatePresence>
+          {images.length > 0 && (
+            <m.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
+              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+              <div className="flex items-center gap-4 px-6 py-4 rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-cyan-500/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                    <ImageIcon className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-white">{images.length} images</div>
+                    <div className="text-xs text-slate-400">Ready</div>
+                  </div>
+                </div>
+                <div className="w-px h-10 bg-white/10" />
+                <m.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => navigate('/editor')}
+                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-linear-to-r from-cyan-500 to-purple-600 text-white font-semibold shadow-lg shadow-cyan-500/25">
+                  <Zap className="w-4 h-4" />Start Editing
+                </m.button>
+              </div>
+            </m.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showSuccess && (
+            <m.div initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.9 }}
+              className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50">
+              <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-emerald-500 text-white font-medium shadow-lg shadow-emerald-500/25">
+                <CheckCircle2 className="w-5 h-5" /><span>Images added!</span>
+                <button onClick={() => setShowSuccess(false)} className="ml-2"><X className="w-4 h-4" /></button>
+              </div>
+            </m.div>
+          )}
+        </AnimatePresence>
       </div>
-    </div>
+    </LazyMotion>
   );
 }

@@ -199,8 +199,11 @@ export async function renderWatermark(
         // Apply professional image adjustments
         applyImageAdjustments(ctx, img, adjustments, width, height);
 
-        // Draw text watermark if enabled
-        if (config.text && config.text.trim().length > 0) {
+        // Draw pattern watermark if enabled
+        if (config.pattern && config.pattern !== 'none' && config.text && config.text.trim().length > 0) {
+          await drawPatternWatermark(ctx, canvas, config);
+        } else if (config.text && config.text.trim().length > 0) {
+          // Draw single text watermark if no pattern
           const position = await calculatePosition(canvas, config, faceModel, customPosition);
           await drawTextWatermark(ctx, canvas, config, position);
         }
@@ -232,20 +235,25 @@ export async function renderWatermark(
         }
 
         // Export with quality settings
-        // Final sharpening pass for higher quality exports
-        try {
-          if (qualityKey === 'hd' || qualityKey === 'ultra') {
-            // Use gentler sharpen levels to avoid over-brightening on exported images
-            // Reduced further for better UX on lower-powered devices.
-            const sharpenLevel = qualityKey === 'ultra' ? 0.12 : 0.06;
-            applyFinalSharpen(ctx, canvas, sharpenLevel);
-          }
-        } catch (err) {
-          console.warn('Final sharpen failed', err);
-        }
+        // HD/Ultra: NO automatic sharpening - preserve pristine original quality
+        // Users can manually apply sharpening via the Enhance tab if desired
 
+        // Use canvas.toBlob for better quality control (async)
         const mimeType = outFormat === 'png' ? 'image/png' : outFormat === 'webp' ? 'image/webp' : 'image/jpeg';
-        resolve(canvas.toDataURL(mimeType, settings.quality));
+        const qualityParam = outFormat === 'png' ? undefined : settings.quality;
+        
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error('Failed to create blob'));
+              return;
+            }
+            const url = URL.createObjectURL(blob);
+            resolve(url);
+          },
+          mimeType,
+          qualityParam
+        );
       } catch (err) {
         console.error('Watermark render failed:', err);
         reject(err);
@@ -255,98 +263,6 @@ export async function renderWatermark(
     img.onerror = () => reject(new Error('Failed to load image'));
     img.src = imageUrl;
   });
-}
-
-function applyFinalSharpen(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, amount: number) {
-  try {
-    const width = canvas.width;
-    const height = canvas.height;
-    const src = ctx.getImageData(0, 0, width, height);
-    // Multi-pass sharpening combining a stronger unsharp-mask (high-pass) + a convolution sharpen kernel
-    const data = src.data;
-
-    // First, create a blurred version (fast approximate) for high-pass extraction
-    const off = document.createElement('canvas');
-    off.width = width;
-    off.height = height;
-    const octx = off.getContext('2d');
-    if (!octx) return;
-    octx.putImageData(src, 0, 0);
-
-    // Use canvas filter if available, otherwise fallback to small-box blur by scaling
-    let blurredImageData: ImageData | null = null;
-    try {
-      // stronger blur for clearer high-pass extraction on high-res images
-      octx.filter = `blur(${Math.max(1, (Math.max(width, height) / 2000)) * 2}px)`;
-      octx.drawImage(off, 0, 0);
-      blurredImageData = octx.getImageData(0, 0, width, height);
-    } catch {
-      // fallback: small downscale/upscale trick
-      try {
-        const tmp = document.createElement('canvas');
-        const tw = Math.max(2, Math.round(width / 16));
-        const th = Math.max(2, Math.round(height / 16));
-        tmp.width = tw;
-        tmp.height = th;
-        const tctx = tmp.getContext('2d');
-        if (tctx) {
-          tctx.drawImage(off, 0, 0, tw, th);
-          octx.clearRect(0, 0, width, height);
-          octx.drawImage(tmp, 0, 0, tw, th, 0, 0, width, height);
-          blurredImageData = octx.getImageData(0, 0, width, height);
-        }
-      } catch {
-        // give up on blur fallback
-      }
-    }
-
-    if (blurredImageData) {
-      const bdata = blurredImageData.data;
-      // high-pass sharpen (unsharp mask): add (orig - blurred) * amount
-      // Use a conservative multiplier so we don't push highlights too far.
-      // Reduced from previous values to make the high-pass contribution milder.
-      const hpAmount = Math.min(1.0, amount * 0.45);
-      for (let i = 0; i < data.length; i += 4) {
-        data[i] = Math.min(255, Math.max(0, data[i] + (data[i] - bdata[i]) * hpAmount));
-        data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + (data[i + 1] - bdata[i + 1]) * hpAmount));
-        data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + (data[i + 2] - bdata[i + 2]) * hpAmount));
-      }
-    }
-
-    // Second pass: convolution sharpen kernel for crisp edges
-    // Kernel: center positive, neighbors negative. We'll normalize the kernel
-    // so its sum is 1 to avoid introducing a DC gain (which brightens the image).
-    const kernelScale = Math.max(0, Math.round(amount * 4));
-    const kernel = [0, -1, 0, -1, 5 + kernelScale, -1, 0, -1, 0];
-    const kernelSum = kernel.reduce((s, v) => s + v, 0) || 1;
-    const sw = width;
-    const sh = height;
-    const copy = new Uint8ClampedArray(data); // copy after HP pass
-    const idx = (x: number, y: number, c: number) => ((y * sw + x) * 4) + c;
-    for (let y = 1; y < sh - 1; y++) {
-      for (let x = 1; x < sw - 1; x++) {
-        for (let c = 0; c < 3; c++) {
-          let acc = 0;
-          acc += copy[idx(x - 1, y - 1, c)] * kernel[0];
-          acc += copy[idx(x, y - 1, c)] * kernel[1];
-          acc += copy[idx(x + 1, y - 1, c)] * kernel[2];
-          acc += copy[idx(x - 1, y, c)] * kernel[3];
-          acc += copy[idx(x, y, c)] * kernel[4];
-          acc += copy[idx(x + 1, y, c)] * kernel[5];
-          acc += copy[idx(x - 1, y + 1, c)] * kernel[6];
-          acc += copy[idx(x, y + 1, c)] * kernel[7];
-          acc += copy[idx(x + 1, y + 1, c)] * kernel[8];
-          // Normalize to avoid brightening
-          const out = acc / kernelSum;
-          data[idx(x, y, c)] = Math.min(255, Math.max(0, out));
-        }
-      }
-    }
-
-    ctx.putImageData(src, 0, 0);
-  } catch (err) {
-    console.warn('applyFinalSharpen error', err);
-  }
 }
 
 /**
@@ -647,6 +563,102 @@ async function calculatePosition(
 }
 
 /**
+ * Draw pattern watermark (tiled, diagonal, grid, etc.)
+ */
+async function drawPatternWatermark(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  config: WatermarkConfig
+) {
+  const pattern = config.pattern;
+  const spacing = config.patternSpacing || 200;
+  const width = canvas.width;
+  const height = canvas.height;
+
+  const positions: Array<{ x: number; y: number }> = [];
+
+  switch (pattern) {
+    case 'tiled': {
+      // Grid pattern covering the entire canvas
+      for (let y = spacing / 2; y < height; y += spacing) {
+        for (let x = spacing / 2; x < width; x += spacing) {
+          positions.push({ x, y });
+        }
+      }
+      break;
+    }
+
+    case 'diagonal': {
+      // Diagonal pattern from top-left to bottom-right
+      const diagSpacing = spacing * 1.2;
+      for (let y = -width; y < height + width; y += diagSpacing) {
+        for (let x = -height; x < width + height; x += diagSpacing) {
+          positions.push({ x, y });
+        }
+      }
+      break;
+    }
+
+    case 'grid': {
+      // Grid lines pattern
+      for (let y = 0; y < height; y += spacing) {
+        for (let x = 0; x < width; x += spacing / 3) {
+          positions.push({ x, y });
+        }
+      }
+      for (let x = 0; x < width; x += spacing) {
+        for (let y = 0; y < height; y += spacing / 3) {
+          positions.push({ x, y });
+        }
+      }
+      break;
+    }
+
+    case 'scattered': {
+      // Random scattered pattern
+      const count = Math.floor((width * height) / (spacing * spacing));
+      for (let i = 0; i < count; i++) {
+        positions.push({
+          x: Math.random() * width,
+          y: Math.random() * height
+        });
+      }
+      break;
+    }
+
+    case 'border': {
+      // Border pattern around edges
+      const borderSpacing = spacing / 2;
+      // Top edge
+      for (let x = borderSpacing; x < width; x += borderSpacing) {
+        positions.push({ x, y: spacing / 2 });
+      }
+      // Bottom edge
+      for (let x = borderSpacing; x < width; x += borderSpacing) {
+        positions.push({ x, y: height - spacing / 2 });
+      }
+      // Left edge
+      for (let y = spacing; y < height - spacing; y += borderSpacing) {
+        positions.push({ x: spacing / 2, y });
+      }
+      // Right edge
+      for (let y = spacing; y < height - spacing; y += borderSpacing) {
+        positions.push({ x: width - spacing / 2, y });
+      }
+      break;
+    }
+  }
+
+  // Draw watermark at each position with reduced opacity
+  const originalOpacity = config.opacity;
+  const patternOpacity = config.patternOpacity !== undefined ? config.patternOpacity : Math.max(20, originalOpacity / 2);
+  
+  for (const position of positions) {
+    await drawTextWatermark(ctx, canvas, { ...config, opacity: patternOpacity }, position);
+  }
+}
+
+/**
  * Draw text watermark with ALL features working
  */
 async function drawTextWatermark(
@@ -668,13 +680,26 @@ async function drawTextWatermark(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
+  // Apply text transform from config (user-defined) or style (preset)
   let text = config.text || '';
-  if (styleConfig.textTransform === 'uppercase') text = text.toUpperCase();
-  if (styleConfig.textTransform === 'lowercase') text = text.toLowerCase();
+  const textTransform = config.textTransform || styleConfig.textTransform;
+  if (textTransform === 'uppercase') text = text.toUpperCase();
+  if (textTransform === 'lowercase') text = text.toLowerCase();
+  if (textTransform === 'capitalize') text = text.replace(/\b\w/g, l => l.toUpperCase());
 
+  // Apply letter spacing if specified
+  const letterSpacing = config.letterSpacing !== undefined ? config.letterSpacing : (styleConfig.letterSpacing || 0);
+  
   const metrics = ctx.measureText(text);
-  const textWidth = metrics.width;
-  const textHeight = fontSize * 1.3;
+  let textWidth = metrics.width;
+  
+  // Adjust text width for letter spacing
+  if (letterSpacing && letterSpacing !== 0) {
+    textWidth += (text.length - 1) * (letterSpacing * fontSize / 100);
+  }
+  
+  const lineHeight = config.lineHeight !== undefined ? config.lineHeight : 1.3;
+  const textHeight = fontSize * lineHeight;
 
   const bgWidth = textWidth + (styleConfig.padding.horizontal * 2);
   const bgHeight = textHeight + (styleConfig.padding.vertical * 2);
@@ -699,13 +724,19 @@ async function drawTextWatermark(
   const bgX = position.x - bgWidth / 2;
   const bgY = position.y - bgHeight / 2;
 
-  // Draw shadow/glow
-  if (styleConfig.boxShadow || config.glowEffect) {
-    const shadow = styleConfig.boxShadow || { x: 0, y: 0, blur: 20, color: 'rgba(26, 124, 255, 0.6)' };
-    ctx.shadowOffsetX = shadow.x;
-    ctx.shadowOffsetY = shadow.y;
-    ctx.shadowBlur = shadow.blur + (config.glowEffect ? 15 : 0);
-    ctx.shadowColor = config.glowEffect ? 'rgba(26, 124, 255, 0.8)' : shadow.color;
+  // Draw shadow/glow with user-defined values
+  const glowEnabled = config.glowEffect;
+  const glowIntensity = config.glowIntensity !== undefined ? config.glowIntensity : 50;
+  const glowColor = config.glowColor || '#00FFFF';
+  const shadowBlur = config.shadowBlur !== undefined ? config.shadowBlur : (styleConfig.boxShadow?.blur || 20);
+  const shadowColor = config.shadowColor || (styleConfig.boxShadow?.color || 'rgba(0,0,0,0.5)');
+  
+  if (styleConfig.boxShadow || glowEnabled) {
+    const shadow = styleConfig.boxShadow || { x: 0, y: 0, blur: shadowBlur, color: shadowColor };
+    ctx.shadowOffsetX = config.shadowOffsetX !== undefined ? config.shadowOffsetX : shadow.x;
+    ctx.shadowOffsetY = config.shadowOffsetY !== undefined ? config.shadowOffsetY : shadow.y;
+    ctx.shadowBlur = shadowBlur + (glowEnabled ? (glowIntensity / 5) : 0);
+    ctx.shadowColor = glowEnabled ? glowColor : shadowColor;
   }
 
   drawBackground(ctx, styleConfig, bgX, bgY, bgWidth, bgHeight);
@@ -718,30 +749,60 @@ async function drawTextWatermark(
     drawBorder(ctx, styleConfig, bgX, bgY, bgWidth, bgHeight);
   }
 
-  // Text shadow
-  if (styleConfig.textShadow || config.glowEffect) {
-    const shadow = styleConfig.textShadow || { x: 0, y: 0, blur: 10, color: 'rgba(26, 124, 255, 0.8)' };
-    ctx.shadowOffsetX = shadow.x;
-    ctx.shadowOffsetY = shadow.y;
-    ctx.shadowBlur = shadow.blur + (config.glowEffect ? 10 : 0);
-    ctx.shadowColor = config.glowEffect ? 'rgba(26, 124, 255, 0.9)' : shadow.color;
+  // Text shadow with user-defined values
+  if (styleConfig.textShadow || glowEnabled || config.shadowIntensity > 0) {
+    const shadow = styleConfig.textShadow || { x: 0, y: 0, blur: shadowBlur, color: shadowColor };
+    const shadowIntensity = config.shadowIntensity || 0;
+    ctx.shadowOffsetX = config.shadowOffsetX !== undefined ? config.shadowOffsetX : (shadow.x * shadowIntensity / 100);
+    ctx.shadowOffsetY = config.shadowOffsetY !== undefined ? config.shadowOffsetY : (shadow.y * shadowIntensity / 100);
+    ctx.shadowBlur = shadowBlur * (shadowIntensity / 100) + (glowEnabled ? (glowIntensity / 5) : 0);
+    ctx.shadowColor = glowEnabled ? glowColor : shadowColor;
   }
 
-  // Draw text with stroke if enabled
-  ctx.fillStyle = config.color;
+  // Apply gradient if specified
+  let fillStyle: string | CanvasGradient = config.color;
+  if (config.gradientFrom && config.gradientTo) {
+    const gradient = ctx.createLinearGradient(bgX, bgY, bgX + bgWidth, bgY);
+    gradient.addColorStop(0, config.gradientFrom);
+    gradient.addColorStop(1, config.gradientTo);
+    fillStyle = gradient;
+  }
+  ctx.fillStyle = fillStyle;
   
+  // Draw text with stroke if enabled
   if (config.strokeWidth && config.strokeWidth > 0) {
     ctx.strokeStyle = config.strokeColor || '#000000';
     ctx.lineWidth = config.strokeWidth;
-    ctx.strokeText(text, position.x, position.y);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.miterLimit = 2;
+    
+    // Draw text with letter spacing
+    if (letterSpacing && letterSpacing !== 0) {
+      let currentX = position.x - (textWidth / 2);
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const charWidth = ctx.measureText(char).width;
+        ctx.strokeText(char, currentX + charWidth / 2, position.y);
+        currentX += charWidth + (letterSpacing * fontSize / 100);
+      }
+    } else {
+      ctx.strokeText(text, position.x, position.y);
+    }
   }
 
-  // Ensure stroke is rendered with rounded joins/caps for better appearance
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.miterLimit = 2;
-  
-  ctx.fillText(text, position.x, position.y);
+  // Draw filled text with letter spacing
+  if (letterSpacing && letterSpacing !== 0) {
+    let currentX = position.x - (textWidth / 2);
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const charWidth = ctx.measureText(char).width;
+      ctx.fillText(char, currentX + charWidth / 2, position.y);
+      currentX += charWidth + (letterSpacing * fontSize / 100);
+    }
+  } else {
+    ctx.fillText(text, position.x, position.y);
+  }
 
   ctx.restore();
 }
