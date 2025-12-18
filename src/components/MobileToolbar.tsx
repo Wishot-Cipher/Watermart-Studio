@@ -33,7 +33,7 @@ export default function MobileToolbar({
           onClick={() => onTabChange('watermark')}
           className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition-all ${
             activeTab === 'watermark'
-              ? 'bg-gradient-to-r from-[#1A7CFF] to-[#0D6EF5] text-white shadow-[0_0_20px_rgba(26,124,255,0.4)]'
+              ? 'bg-linear-to-r from-[#1A7CFF] to-[#0D6EF5] text-white shadow-[0_0_20px_rgba(26,124,255,0.4)]'
               : 'bg-white/5 text-[#9FB2C8]'
           }`}
         >
@@ -44,7 +44,7 @@ export default function MobileToolbar({
           onClick={() => onTabChange('enhance')}
           className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition-all ${
             activeTab === 'enhance'
-              ? 'bg-gradient-to-r from-[#1A7CFF] to-[#0D6EF5] text-white shadow-[0_0_20px_rgba(26,124,255,0.4)]'
+              ? 'bg-linear-to-r from-[#1A7CFF] to-[#0D6EF5] text-white shadow-[0_0_20px_rgba(26,124,255,0.4)]'
               : 'bg-white/5 text-[#9FB2C8]'
           }`}
         >
@@ -84,7 +84,7 @@ export default function MobileToolbar({
         <motion.button
           whileTap={{ scale: 0.95 }}
           onClick={onSave}
-          className="flex flex-col items-center justify-center gap-1 py-2 rounded-lg bg-gradient-to-r from-[#1A7CFF] to-[#0D6EF5] text-white shadow-[0_0_20px_rgba(26,124,255,0.4)]"
+          className="flex flex-col items-center justify-center gap-1 py-2 rounded-lg bg-linear-to-r from-[#1A7CFF] to-[#0D6EF5] text-white shadow-[0_0_20px_rgba(26,124,255,0.4)]"
         >
           <Save className="w-5 h-5" />
           <span className="text-[10px] font-semibold">Save</span>

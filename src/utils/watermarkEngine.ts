@@ -242,18 +242,38 @@ export async function renderWatermark(
         const mimeType = outFormat === 'png' ? 'image/png' : outFormat === 'webp' ? 'image/webp' : 'image/jpeg';
         const qualityParam = outFormat === 'png' ? undefined : settings.quality;
         
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) {
-              reject(new Error('Failed to create blob'));
-              return;
+        // Prefer canvas.toBlob but provide robust fallback to toDataURL -> fetch if it fails
+        try {
+          canvas.toBlob(async (blob) => {
+            try {
+              if (!blob) {
+                // fallback path
+                const dataUrl = canvas.toDataURL(mimeType, qualityParam as any);
+                const res = await fetch(dataUrl);
+                const fblob = await res.blob();
+                const url = URL.createObjectURL(fblob);
+                resolve(url);
+                return;
+              }
+              const url = URL.createObjectURL(blob);
+              resolve(url);
+            } catch (err) {
+              console.warn('toBlob callback fallback failed', err);
+              reject(err);
             }
-            const url = URL.createObjectURL(blob);
+          }, mimeType, qualityParam);
+        } catch (err) { // Catch block for error handling
+          console.warn('canvas.toBlob threw', err);
+          try {
+            const dataUrl = canvas.toDataURL(mimeType, qualityParam as any);
+            const res = await fetch(dataUrl);
+            const fblob = await res.blob();
+            const url = URL.createObjectURL(fblob);
             resolve(url);
-          },
-          mimeType,
-          qualityParam
-        );
+          } catch (innerErr) {
+            reject(innerErr);
+          }
+        }
       } catch (err) {
         console.error('Watermark render failed:', err);
         reject(err);

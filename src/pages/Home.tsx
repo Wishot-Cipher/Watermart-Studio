@@ -77,7 +77,7 @@ export default function Home() {
               <span className="text-sm font-medium bg-linear-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">Professional Watermark Studio</span>
             </m.div>
             <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold mb-6">
-              <span className="bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">Watermark</span><br/>
+              <span className="bg-linear-to-r from-white to-slate-400 bg-clip-text text-transparent">Watermark</span><br/>
               <span className="bg-linear-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">Studio Pro</span>
             </h1>
             <p className="text-base text-slate-400 max-w-2xl mx-auto">Professional watermarking with AI placement, batch processing, and stunning effects</p>

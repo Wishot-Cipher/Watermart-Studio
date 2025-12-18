@@ -32,6 +32,10 @@ interface WatermarkConfig {
   tileSpacing: number;
   letterSpacing: number;
   blur: number;
+  // Dropcap (large first-letter) styling
+  dropcap?: boolean;
+  dropcapColor?: string;
+  dropcapSize?: number;
   // Background options applied to the watermark text
   bgStyle?: 'none' | 'solid' | 'gradient' | 'glass';
   bgColor?: string;
@@ -101,7 +105,21 @@ const defaultWatermark: WatermarkConfig = {
   textGlow: false,
   textGlowColor: '#00d4ff',
   textGlowBlur: 28,
+  dropcap: false,
+  dropcapSize: 86,
 };
+
+// Small utility to darken/lighten hex colors by percent (-100..100)
+function shadeHex(hex: string | undefined, percent: number) {
+  if (!hex) return '#000000';
+  const h = hex.replace('#', '');
+  const num = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+  const r = (num >> 16) + Math.round(255 * (percent / 100));
+  const g = ((num >> 8) & 0x00ff) + Math.round(255 * (percent / 100));
+  const b = (num & 0x0000ff) + Math.round(255 * (percent / 100));
+  const clamp = (v: number) => Math.max(0, Math.min(255, v));
+  return `#${((clamp(r) << 16) | (clamp(g) << 8) | clamp(b)).toString(16).padStart(6, '0')}`;
+}
 
 const defaultAdjustments: ImageAdjustments = {
   brightness: 0,
@@ -209,6 +227,12 @@ export default function Editor() {
       display: 'inline-block',
       boxSizing: 'border-box',
     };
+
+    // support dropcap styling via watermark.dropcap config
+    if (watermark.dropcap) {
+      // we'll keep base style for the container; the first letter will be styled in the inner span
+      // nothing to change here at container level beyond ensuring display:inline-block
+    }
 
     switch (watermark.style) {
       case 'modern':
@@ -737,7 +761,7 @@ export default function Editor() {
     try {
       const imagesToExport = single ? [currentImage] : images;
       const totalImages = imagesToExport.length;
-      const scale = preview ? 1 : exportScale; // Use 1x for preview to avoid sampling/blur scale mismatches
+      const requestedScale = preview ? 1 : exportScale; // Use 1x for preview to avoid sampling/blur scale mismatches
       
       const batchResults: { blob: Blob; filename: string }[] = [];
 
@@ -752,30 +776,46 @@ export default function Editor() {
         const img = imagesToExport[i];
         setExportProgress(Math.round(((i + 0.5) / totalImages) * 100));
         
-        // Create canvas with HD scaling
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d', { alpha: true }) as CanvasRenderingContext2D;
-        if (!ctx) throw new Error('Could not get canvas context');
-        
-        // Load the image
+        // Load the image first so we can read its natural dimensions
         const image = new Image();
         image.crossOrigin = 'anonymous';
-        
         await new Promise<void>((resolve, reject) => {
           image.onload = () => resolve();
           image.onerror = () => reject(new Error('Failed to load image'));
           image.src = img.url;
         });
+
+        // Create canvas with HD scaling. Apply a safety cap to avoid creating huge canvases
+        const MAX_CANVAS_DIM = 8192; // keep within safe browser limits (adjustable)
+        const desiredWidth = Math.round(image.naturalWidth * requestedScale);
+        const desiredHeight = Math.round(image.naturalHeight * requestedScale);
+        let finalWidth = desiredWidth;
+        let finalHeight = desiredHeight;
+        // Compute actual scale applied (may be reduced to stay under MAX_CANVAS_DIM)
+        let scale = requestedScale;
+        if (desiredWidth > MAX_CANVAS_DIM || desiredHeight > MAX_CANVAS_DIM) {
+          const gscale = Math.min(MAX_CANVAS_DIM / desiredWidth, MAX_CANVAS_DIM / desiredHeight);
+          finalWidth = Math.max(1, Math.floor(desiredWidth * gscale));
+          finalHeight = Math.max(1, Math.floor(desiredHeight * gscale));
+          scale = finalWidth / image.naturalWidth; // actual applied scale
+          // Inform the user that we reduced the requested scale to avoid OOM/canvas limits
+          setExportError('Requested export was reduced to fit browser limits');
+          setTimeout(() => setExportError(null), 4000);
+        }
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { alpha: true }) as CanvasRenderingContext2D;
+        if (!ctx) throw new Error('Could not get canvas context');
         
-        // Apply HD scale for higher quality export
-        canvas.width = image.naturalWidth * scale;
-        canvas.height = image.naturalHeight * scale;
-        
+        // Apply chosen scaling
+        canvas.width = finalWidth;
+        canvas.height = finalHeight;
+
         // Enable image smoothing for better quality
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-        
-        // Scale context for HD
+
+        // Scale context for HD (use computed actual scale)
         ctx.scale(scale, scale);
         
         // Apply adjustments
@@ -826,6 +866,78 @@ export default function Editor() {
           const fontStyle = ['classic', 'elegant'].includes(watermark.style) ? 'italic' : 'normal';
           const fontFamily = watermark.style === 'handwritten' ? 'Pacifico, cursive' : watermark.fontFamily;
           ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${fontFamily}`;
+
+          // Dropcap helper: draw first letter larger and styled while keeping centered layout
+          const dropcapEnabled = Boolean((watermark as any).dropcap);
+          const dropcapSize = (watermark as any).dropcapSize ?? Math.round(scaledFontSize * 1.8);
+          const dropcapColor = (watermark as any).dropcapColor || watermark.color;
+          const drawTextPieces = (displayText: string, ox = 0, oy = 0, mode: 'fill' | 'stroke' = 'fill') => {
+            if (!dropcapEnabled || !displayText) {
+              if (mode === 'fill') ctx.fillText(displayText, ox, oy);
+              else ctx.strokeText(displayText, ox, oy);
+              return;
+            }
+            const first = displayText.charAt(0);
+            const rest = displayText.slice(1);
+
+            // refined spacing: smaller gap and a slight tuck (negative overlap) so the rest sits closer to the cap
+            const gap = Math.max(0, Math.round(dropcapSize * 0.02));
+            const tuck = Math.round(dropcapSize * 0.05); // how much rest should overlap under the cap
+            const dropcapYOffset = Math.round((dropcapSize - scaledFontSize) * 0.18); // baseline nudge for nicer optical alignment
+
+            // measure widths with appropriate fonts
+            const prevFont = ctx.font;
+            const prevAlign = ctx.textAlign;
+            const prevFill = ctx.fillStyle;
+            const prevStroke = ctx.strokeStyle;
+            const prevLineWidth = ctx.lineWidth;
+            const prevShadowColor = ctx.shadowColor;
+            const prevShadowBlur = ctx.shadowBlur;
+
+            ctx.font = `${fontStyle} ${fontWeight} ${dropcapSize}px ${fontFamily}`;
+            const firstW = ctx.measureText(first).width;
+            ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${fontFamily}`;
+            const restW = ctx.measureText(rest).width;
+            const totalW = firstW + restW + gap - tuck;
+
+            const leftStart = -totalW / 2 + ox;
+
+            // removed soft background ellipse to keep the cap crisp (no blurred background)
+
+            ctx.save();
+            ctx.textAlign = 'left';
+            if (mode === 'fill') {
+              // draw a thin, crisp stroke and fill for the cap (avoid blur)
+              ctx.font = `${fontStyle} ${fontWeight} ${dropcapSize}px ${fontFamily}`;
+              ctx.lineWidth = Math.max(0.6, Math.round(dropcapSize * 0.02));
+              ctx.strokeStyle = hexToRgbaCanvas(shadeHex(dropcapColor, -12), 0.32);
+              ctx.strokeText(first, leftStart, oy + dropcapYOffset);
+
+              ctx.fillStyle = dropcapColor;
+              ctx.fillText(first, leftStart, oy + dropcapYOffset);
+
+              // draw rest with previous fill, tucked closer under the cap and minimally raised for alignment
+              ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${fontFamily}`;
+              ctx.fillStyle = prevFill;
+              ctx.fillText(rest, leftStart + firstW - tuck + gap, oy - Math.round(dropcapSize * 0.03));
+            } else {
+              ctx.font = `${fontStyle} ${fontWeight} ${dropcapSize}px ${fontFamily}`;
+              ctx.lineWidth = Math.max(1, Math.round(dropcapSize * 0.03));
+              ctx.strokeText(first, leftStart, oy + dropcapYOffset);
+              ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${fontFamily}`;
+              ctx.strokeText(rest, leftStart + firstW - tuck + gap, oy - Math.round(dropcapSize * 0.07));
+            }
+            ctx.restore();
+
+            // restore
+            ctx.textAlign = prevAlign;
+            ctx.font = prevFont;
+            ctx.fillStyle = prevFill;
+            ctx.strokeStyle = prevStroke;
+            ctx.lineWidth = prevLineWidth;
+            ctx.shadowColor = prevShadowColor;
+            ctx.shadowBlur = prevShadowBlur;
+          };
           
           // Apply letter spacing by drawing each character (canvas doesn't support letterSpacing natively)
           // For now we skip setting a non-standard property; manual letter spacing would draw each glyph separately.
@@ -971,14 +1083,14 @@ export default function Editor() {
               _ctx.save();
               _ctx.filter = `blur(${glowBlurPx}px)`;
               _ctx.fillStyle = hexToRgbaCanvas(glowColor, 0.7);
-              _ctx.fillText(text, 0, 0);
+              drawTextPieces(text, 0, 0, 'fill');
               _ctx.restore();
             } else {
               _ctx.save();
               _ctx.shadowColor = hexToRgbaCanvas(glowColor, 0.85);
               _ctx.shadowBlur = glowBlurPx * 0.9;
               _ctx.fillStyle = hexToRgbaCanvas(glowColor, 0.6);
-              _ctx.fillText(text, 0, 0);
+              drawTextPieces(text, 0, 0, 'fill');
               _ctx.restore();
             }
           }
@@ -991,7 +1103,7 @@ export default function Editor() {
               ctx.shadowColor = watermark.color;
               ctx.shadowBlur = 20 * scale;
               ctx.fillStyle = watermark.color;
-              ctx.fillText(text, 0, 0);
+              drawTextPieces(text, 0, 0, 'fill');
               ctx.shadowBlur = 40 * scale;
               ctx.fillText(text, 0, 0);
               ctx.shadowBlur = 60 * scale;
@@ -1033,12 +1145,12 @@ export default function Editor() {
               for (let d = 6; d > 0; d--) {
                 ctx.globalAlpha = (watermark.opacity / 100) * (0.12 + (6 - d) * 0.08);
                 ctx.fillStyle = '#000000';
-                ctx.fillText(text, d * 2, d * 2);
+                drawTextPieces(text, d * 2, d * 2, 'fill');
               }
               // final text
               ctx.globalAlpha = watermark.opacity / 100;
               ctx.fillStyle = watermark.color;
-              ctx.fillText(text, 0, 0);
+              drawTextPieces(text, 0, 0, 'fill');
               break;
             }
               
@@ -1046,17 +1158,17 @@ export default function Editor() {
               // Outline/stroke only
               ctx.strokeStyle = watermark.color;
               ctx.lineWidth = 3 * scale;
-              ctx.strokeText(text, 0, 0);
+              drawTextPieces(text, 0, 0, 'stroke');
               break;
               
             case 'emboss':
               // Emboss effect - highlight and shadow
               ctx.fillStyle = 'rgba(255,255,255,0.4)';
-              ctx.fillText(text, -1, -1);
+              drawTextPieces(text, -1, -1, 'fill');
               ctx.fillStyle = 'rgba(0,0,0,0.4)';
-              ctx.fillText(text, 1, 1);
+              drawTextPieces(text, 1, 1, 'fill');
               ctx.fillStyle = watermark.color;
-              ctx.fillText(text, 0, 0);
+              drawTextPieces(text, 0, 0, 'fill');
               break;
               
             case 'metallic': {
@@ -1071,7 +1183,7 @@ export default function Editor() {
               ctx.shadowColor = 'rgba(0,0,0,0.3)';
               ctx.shadowBlur = 4 * scale;
               ctx.shadowOffsetY = 2 * scale;
-              ctx.fillText(text, 0, 0);
+              drawTextPieces(text, 0, 0, 'fill');
               break;
             }
               
@@ -1082,7 +1194,7 @@ export default function Editor() {
               textGradient.addColorStop(0.5, '#A24BFF');
               textGradient.addColorStop(1, '#1A7CFF');
               ctx.fillStyle = textGradient;
-              ctx.fillText(text, 0, 0);
+              drawTextPieces(text, 0, 0, 'fill');
               break;
             }
               
@@ -1103,7 +1215,7 @@ export default function Editor() {
                 ctx.strokeRect(-boxWidth/2, -boxHeight/2, boxWidth, boxHeight);
               }
               ctx.fillStyle = watermark.color;
-              ctx.fillText(text, 0, 0);
+              drawTextPieces(text, 0, 0, 'fill');
               break;
             }
             case 'glassLight': {
@@ -1117,8 +1229,7 @@ export default function Editor() {
                 const g = ctx.createLinearGradient(0, -boxHeight/2, 0, boxHeight/2);
                 g.addColorStop(0, 'rgba(255,255,255,0.9)');
                 g.addColorStop(1, 'rgba(255,255,255,0.7)');
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                ctx.fillStyle = g as any;
+                ctx.fillStyle = g as CanvasGradient | string;
                 roundRect(ctx, -boxWidth/2, -boxHeight/2, boxWidth, boxHeight, 16);
                 ctx.fill();
                 ctx.strokeStyle = 'rgba(255,255,255,0.5)';
@@ -1126,7 +1237,7 @@ export default function Editor() {
                 ctx.stroke();
               }
               ctx.fillStyle = watermark.color;
-              ctx.fillText(text, 0, 0);
+              drawTextPieces(text, 0, 0, 'fill');
               break;
             }
             case 'glassDark': {
@@ -1148,7 +1259,7 @@ export default function Editor() {
                 ctx.stroke();
               }
               ctx.fillStyle = watermark.color;
-              ctx.fillText(text, 0, 0);
+              drawTextPieces(text, 0, 0, 'fill');
               break;
             }
             case 'frostedBlur': {
@@ -1182,9 +1293,9 @@ export default function Editor() {
               ctx.shadowColor = 'rgba(0,0,0,0.8)';
               ctx.shadowBlur = 20 * scale;
               ctx.fillStyle = watermark.color;
-              ctx.fillText(text.toUpperCase(), 0, 0);
+              drawTextPieces(text.toUpperCase(), 0, 0, 'fill');
               ctx.shadowBlur = 40 * scale;
-              ctx.fillText(text.toUpperCase(), 0, 0);
+              drawTextPieces(text.toUpperCase(), 0, 0, 'fill');
               break;
               
             case 'vintage':
@@ -1194,7 +1305,7 @@ export default function Editor() {
               ctx.shadowOffsetX = 2 * scale;
               ctx.shadowOffsetY = 2 * scale;
               ctx.fillStyle = watermark.color;
-              ctx.fillText(text.toUpperCase(), 0, 0);
+              drawTextPieces(text.toUpperCase(), 0, 0, 'fill');
               break;
               
             case 'futuristic':
@@ -1202,7 +1313,7 @@ export default function Editor() {
               ctx.shadowColor = watermark.color;
               ctx.shadowBlur = 10 * scale;
               ctx.fillStyle = watermark.color;
-              ctx.fillText(text.toUpperCase(), 0, 0);
+              drawTextPieces(text.toUpperCase(), 0, 0, 'fill');
               ctx.shadowBlur = 20 * scale;
               ctx.fillText(text.toUpperCase(), 0, 0);
               break;
@@ -1327,12 +1438,31 @@ export default function Editor() {
         const mimeType = exportFormat === 'PNG' ? 'image/png' : exportFormat === 'JPG' ? 'image/jpeg' : 'image/webp';
         const quality = exportFormat === 'PNG' ? 1 : exportQuality / 100;
         
-        const blob = await new Promise<Blob>((resolve, reject) => {
-          canvas.toBlob((b) => {
-            if (b) resolve(b);
-            else reject(new Error('Failed to create blob'));
-          }, mimeType, quality);
+        // Create blob from canvas with robust fallbacks (toBlob may return null or throw on large/tainted canvases)
+        let blob: Blob | null = await new Promise((resolve) => {
+          try {
+            canvas.toBlob((b) => resolve(b || null), mimeType, quality);
+          } catch (err) {
+            console.warn('canvas.toBlob threw', err);
+            resolve(null);
+          }
         });
+
+        if (!blob) {
+          // Fallback: try toDataURL and convert to blob via fetch
+          try {
+            const dataUrl = canvas.toDataURL(mimeType, quality);
+            const res = await fetch(dataUrl);
+            blob = await res.blob();
+          } catch (err) {
+            // Provide a descriptive error so user knows why export failed
+            const msg = err instanceof Error ? err.message : String(err);
+            if (/taint/i.test(msg) || /securityerror/i.test(msg)) {
+              throw new Error('Export failed due to cross-origin image tainting. Ensure images are CORS-accessible or use data-URL images.');
+            }
+            throw new Error('Failed to create blob from canvas (toBlob and toDataURL both failed): ' + msg);
+          }
+        }
 
         const originalName = img.file?.name?.replace(/\.[^/.]+$/, '') || `image_${i + 1}`;
         const scaleLabel = scale > 1 ? `_${scale}x` : '';
@@ -1415,7 +1545,7 @@ export default function Editor() {
             animate={{ opacity: 1, scale: 1 }}
             className="text-center p-12"
           >
-            <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center mx-auto mb-6 border border-white/10">
+            <div className="w-24 h-24 rounded-3xl bg-linear-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center mx-auto mb-6 border border-white/10">
               <ImageIcon className="w-12 h-12 text-cyan-400" />
             </div>
             <h2 className="text-2xl font-bold text-white mb-3">No Images</h2>
@@ -1424,7 +1554,7 @@ export default function Editor() {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => navigate('/')}
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-semibold shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-shadow"
+              className="px-6 py-3 rounded-xl bg-linear-to-r from-cyan-500 to-purple-600 text-white font-semibold shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-shadow"
             >
               Go to Upload
             </m.button>
@@ -1473,7 +1603,7 @@ export default function Editor() {
               whileTap={{ scale: 0.98 }}
               onClick={() => setActiveTab('export')}
               disabled={isExporting}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-semibold shadow-lg shadow-violet-500/25 disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-linear-to-r from-violet-600 to-fuchsia-600 text-white font-semibold shadow-lg shadow-violet-500/25 disabled:opacity-50"
             >
               {isExporting ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -1490,20 +1620,24 @@ export default function Editor() {
           <div className="flex-1 flex flex-col bg-[#0a0e15]">
             {/* Image Navigation */}
             {images.length > 1 && (
-              <div className="shrink-0 h-20 bg-[#0d1219]/80 border-b border-white/5 flex items-center gap-2 px-4 overflow-x-auto">
-                {images.map((img, i) => (
-                  <m.button
-                    key={img.id}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setCurrentIndex(i)}
-                    className={`shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${
-                      i === currentIndex ? 'border-violet-500 shadow-lg shadow-violet-500/30' : 'border-transparent opacity-60 hover:opacity-100'
-                    }`}
-                  >
-                    <img src={img.url} alt="" className="w-full h-full object-cover" />
-                  </m.button>
-                ))}
+              <div className="shrink-0 bg-[#0d1219]/80 border-b border-white/5 px-4 py-3">
+                <div className="max-h-36 overflow-y-auto md:flex md:flex-wrap md:justify-center md:overflow-visible">
+                  <div className="flex gap-2 flex-nowrap overflow-x-auto md:flex-wrap md:justify-center md:w-full md:overflow-visible py-1">
+                    {images.map((img, i) => (
+                      <m.button
+                        key={img.id}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setCurrentIndex(i)}
+                        className={`w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${
+                          i === currentIndex ? 'border-violet-500 shadow-lg shadow-violet-500/30' : 'border-transparent opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        <img src={img.url} alt="" className="w-full h-full object-cover" />
+                      </m.button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1546,11 +1680,56 @@ export default function Editor() {
                           const containerStyle: React.CSSProperties = { display: 'inline-block', boxSizing: 'border-box', ...merged };
                           // Remove text-specific background from inner span to avoid double-drawing
                           const innerTextStyle: React.CSSProperties = { ...textOnly, background: 'transparent' };
+                          const dropcapEnabled = Boolean((watermark as any).dropcap);
                           return (
                             <div style={containerStyle} className="relative inline-block">
-                              <span style={innerTextStyle} className="whitespace-nowrap">
-                                {watermark.text}
-                              </span>
+                              {!dropcapEnabled && (
+                                <span style={innerTextStyle} className="whitespace-nowrap">
+                                  {watermark.text}
+                                </span>
+                              )}
+                              {dropcapEnabled && (
+                                (() => {
+                                  const first = (watermark.text || '').charAt(0);
+                                  const rest = (watermark.text || '').slice(1);
+                                  const ddSize = (watermark as any).dropcapSize ?? Math.round(watermark.fontSize * 1.8);
+                                  const ddColor = (watermark as any).dropcapColor || (innerTextStyle.color as string) || '#fff';
+
+                                  // optical tuck and visual treatments for a professional dropcap
+                                  const overlapPx = -Math.round(ddSize * 0.06); // negative margin to tuck rest under cap
+                                  const raiseRest = Math.round(ddSize * 0.08); // how much to raise the rest text
+                                  const strokePx = Math.max(0.3, Math.round(ddSize * 0.006));
+
+                                  const dropStyle: React.CSSProperties = {
+                                    ...innerTextStyle,
+                                    fontSize: `${ddSize}px`,
+                                    color: ddColor,
+                                    lineHeight: 1,
+                                    display: 'inline-block',
+                                    verticalAlign: 'top',
+                                    marginRight: `${overlapPx}px`,
+                                    WebkitTextStroke: `${strokePx}px ${shadeHex(ddColor, -12)}`,
+                                    // remove text shadow and heavy translate to keep the cap crisp
+                                    transform: 'translateY(3%)',
+                                  };
+
+                                  const restStyle: React.CSSProperties = {
+                                    ...innerTextStyle,
+                                    fontSize: `${watermark.fontSize}px`,
+                                    display: 'inline-block',
+                                    verticalAlign: 'baseline',
+                                    transform: `translateY(-${raiseRest}px)`,
+                                    marginLeft: '2px',
+                                  };
+
+                                  return (
+                                    <span className="whitespace-nowrap inline-flex items-start" style={{ alignItems: 'flex-start' }}>
+                                      <span style={dropStyle}>{first}</span>
+                                      <span style={restStyle}>{rest}</span>
+                                    </span>
+                                  );
+                                })()
+                              )}
                             </div>
                           );
                         })()}
@@ -1698,6 +1877,36 @@ export default function Editor() {
                       />
                     </div>
 
+                      {/* Drop-cap / First-letter styling */}
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm text-slate-300">Drop Cap</label>
+                        <button
+                          onClick={() => setWatermark({ ...watermark, dropcap: !watermark.dropcap })}
+                          className={`px-3 py-1 rounded-lg text-sm transition-colors border ${watermark.dropcap ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200' : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/8'}`}
+                        >
+                          {watermark.dropcap ? 'Enabled' : 'Disabled'}
+                        </button>
+                        {watermark.dropcap && (
+                          <div className="flex items-center gap-2 ml-auto">
+                            <input
+                              type="color"
+                              value={watermark.dropcapColor || '#ffffff'}
+                              onChange={(e) => setWatermark({ ...watermark, dropcapColor: e.target.value })}
+                              className="w-10 h-10 rounded-lg border border-white/10"
+                              title="Dropcap color"
+                            />
+                            <Slider
+                              label="Dropcap Size"
+                              value={watermark.dropcapSize ?? Math.round(watermark.fontSize * 1.8)}
+                              onChange={(v) => setWatermark({ ...watermark, dropcapSize: v })}
+                              min={Math.max(12, watermark.fontSize)}
+                              max={Math.max(48, watermark.fontSize * 4)}
+                              icon={Type}
+                            />
+                          </div>
+                        )}
+                      </div>
+
                     {/* Style Presets */}
                     <div className="space-y-3">
                       <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider flex items-center gap-2">
@@ -1719,7 +1928,7 @@ export default function Editor() {
                             {style.id === 'shadow3d' ? (
                               <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02))', opacity: 0.75 }} />
                             ) : (
-                              <div className={`absolute inset-0 bg-gradient-to-br ${style.color} opacity-20 group-hover:opacity-30 transition-opacity`} />
+                              <div className={`absolute inset-0 bg-linear-to-br ${style.color} opacity-20 group-hover:opacity-30 transition-opacity`} />
                             )}
                             <div className="absolute inset-0 bg-slate-900/60" />
                             
@@ -1805,7 +2014,7 @@ export default function Editor() {
                         <button
                           onClick={() => setWatermark({ ...watermark, tileMode: !watermark.tileMode })}
                           className={`relative w-11 h-6 rounded-full transition-colors ${
-                            watermark.tileMode ? 'bg-gradient-to-r from-cyan-500 to-purple-500' : 'bg-slate-800'
+                            watermark.tileMode ? 'bg-linear-to-r from-cyan-500 to-purple-500' : 'bg-slate-800'
                           }`}
                         >
                           <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
@@ -2031,7 +2240,7 @@ export default function Editor() {
 
                       {/* Selected Logo Controls */}
                       {selectedLogo && logos.find((l) => l.id === selectedLogo) && (
-                        <div className="space-y-4 p-4 rounded-xl bg-gradient-to-br from-[#1a1f35] to-[#0d1220] border border-white/5">
+                        <div className="space-y-4 p-4 rounded-xl bg-linear-to-br from-[#1a1f35] to-[#0d1220] border border-white/5">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-medium text-white/70">Logo Settings</span>
                             <div className="flex gap-1">
@@ -2096,7 +2305,7 @@ export default function Editor() {
                                   className={`aspect-square rounded-md transition-all ${
                                     Math.abs(logos.find(l => l.id === selectedLogo)!.position.x - pos.x) < 5 &&
                                     Math.abs(logos.find(l => l.id === selectedLogo)!.position.y - pos.y) < 5
-                                      ? 'bg-gradient-to-br from-purple-500 to-pink-500'
+                                      ? 'bg-linear-to-br from-purple-500 to-pink-500'
                                       : 'bg-white/5 hover:bg-white/10'
                                   }`}
                                 />
@@ -2303,7 +2512,7 @@ export default function Editor() {
                                   : 'hover:ring-1 hover:ring-white/30'
                               }`}
                             >
-                              <div className={`absolute inset-0 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 ${
+                              <div className={`absolute inset-0 bg-linear-to-br from-cyan-500/20 to-purple-500/20 ${
                                 exportScale === option.scale ? 'opacity-30' : 'opacity-0 group-hover:opacity-20'
                               } transition-opacity`} />
                               <div className="absolute inset-0 bg-slate-900/80" />
@@ -2383,7 +2592,7 @@ export default function Editor() {
                         <button
                           onClick={() => exportImage(true)}
                           disabled={isExporting}
-                          className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 text-white font-semibold disabled:opacity-50 transition-all hover:shadow-lg hover:shadow-cyan-500/30 hover:scale-[1.02]"
+                          className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-linear-to-r from-cyan-500 to-cyan-600 text-white font-semibold disabled:opacity-50 transition-all hover:shadow-lg hover:shadow-cyan-500/30 hover:scale-[1.02]"
                         >
                           {isExporting ? (
                             <>
@@ -2472,7 +2681,7 @@ export default function Editor() {
         </button>
 
         {/* Bottom action bar with quick actions for mobile */}
-        <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 p-3 bg-gradient-to-r from-[#071026] to-[#0d1219] border-t border-white/5 flex items-center gap-3">
+        <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 p-3 bg-linear-to-r from-[#071026] to-[#0d1219] border-t border-white/5 flex items-center gap-3">
           <button
             onClick={() => exportImage(true, true)}
             disabled={isExporting}
@@ -2483,10 +2692,10 @@ export default function Editor() {
             Preview
           </button>
 
-          <button
+            <button
             onClick={() => exportImage(true)}
             disabled={isExporting}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 text-white font-semibold disabled:opacity-50"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-linear-to-r from-cyan-500 to-cyan-600 text-white font-semibold disabled:opacity-50"
             title="Export Current"
           >
             <Download className="w-4 h-4" />

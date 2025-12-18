@@ -50,6 +50,11 @@ export interface WatermarkConfig {
   letterSpacing?: number;
   lineHeight?: number;
   textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
+
+  // Dropcap (large first-letter) styling
+  dropcap?: boolean;
+  dropcapColor?: string;
+  dropcapSize?: number;
   
   // Advanced shadow controls
   shadowBlur?: number;
