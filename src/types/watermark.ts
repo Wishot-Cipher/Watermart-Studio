@@ -53,7 +53,6 @@ export interface WatermarkConfig {
 
   // Dropcap (large first-letter) styling
   dropcap?: boolean;
-  dropcapColor?: string;
   dropcapSize?: number;
   
   // Advanced shadow controls
