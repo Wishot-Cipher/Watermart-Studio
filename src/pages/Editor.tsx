@@ -1077,23 +1077,37 @@ export default function Editor() {
     setAdjustments(defaultAdjustments);
   }, []);
 
-  // Handle logo dragging
+  // Handle logo dragging (supports both mouse and touch)
   const handleLogoDrag = useCallback(
-    (e: React.MouseEvent, logoId: string) => {
+    (e: React.MouseEvent | React.TouchEvent, logoId: string) => {
       if (!imageContainerRef.current) return;
 
       const logo = logos.find((l) => l.id === logoId);
       if (!logo || logo.locked) return;
 
+      // Prevent scrolling on touch
+      try { (e as any).preventDefault?.(); } catch (err) { /* noop */ }
       setIsDraggingLogo(true);
       setSelectedLogo(logoId);
 
       const container = imageContainerRef.current;
       const rect = container.getBoundingClientRect();
 
-      const onMouseMove = (moveEvent: MouseEvent) => {
-        const x = ((moveEvent.clientX - rect.left) / rect.width) * 100;
-        const y = ((moveEvent.clientY - rect.top) / rect.height) * 100;
+      // Helper to get x/y from mouse or touch event
+      const getEventCoords = (event: MouseEvent | TouchEvent) => {
+        if ((event as TouchEvent).touches) {
+          const t = (event as TouchEvent).touches[0] || (event as TouchEvent).changedTouches[0];
+          return { x: t.clientX, y: t.clientY };
+        } else {
+          const me = event as MouseEvent;
+          return { x: me.clientX, y: me.clientY };
+        }
+      };
+
+      const updatePosition = (event: MouseEvent | TouchEvent) => {
+        const coords = getEventCoords(event);
+        const x = ((coords.x - rect.left) / rect.width) * 100;
+        const y = ((coords.y - rect.top) / rect.height) * 100;
 
         updateLogo(logoId, {
           position: {
@@ -1103,14 +1117,24 @@ export default function Editor() {
         });
       };
 
-      const onMouseUp = () => {
-        setIsDraggingLogo(false);
-        document.removeEventListener("mousemove", onMouseMove);
-        document.removeEventListener("mouseup", onMouseUp);
+      const onMove = (moveEvent: MouseEvent | TouchEvent) => {
+        try { (moveEvent as any).preventDefault?.(); } catch (err) { /* noop */ }
+        updatePosition(moveEvent);
       };
 
-      document.addEventListener("mousemove", onMouseMove);
-      document.addEventListener("mouseup", onMouseUp);
+      const onEnd = () => {
+        setIsDraggingLogo(false);
+        document.removeEventListener("mousemove", onMove as any);
+        document.removeEventListener("mouseup", onEnd);
+        document.removeEventListener("touchmove", onMove as any);
+        document.removeEventListener("touchend", onEnd);
+      };
+
+      // Add both mouse and touch listeners
+      document.addEventListener("mousemove", onMove as any);
+      document.addEventListener("mouseup", onEnd);
+      document.addEventListener("touchmove", onMove as any, { passive: false } as any);
+      document.addEventListener("touchend", onEnd);
     },
     [logos, updateLogo]
   );
@@ -1215,14 +1239,110 @@ export default function Editor() {
           // Scale context for HD (use computed actual scale)
           ctx.scale(scale, scale);
 
-          // Apply adjustments
-          ctx.filter = `
-          brightness(${100 + adjustments.brightness}%)
-          contrast(${100 + adjustments.contrast}%)
-          saturate(${100 + adjustments.saturation}%)
-        `;
+          // Apply adjustments - combine supported CSS filters first
+          const filterString = [
+            `brightness(${100 + adjustments.brightness}%)`,
+            `contrast(${100 + adjustments.contrast}%)`,
+            `saturate(${100 + adjustments.saturation}%)`,
+            adjustments.blur && adjustments.blur > 0 ? `blur(${adjustments.blur}px)` : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+
+          ctx.filter = filterString || "none";
           ctx.drawImage(image, 0, 0, image.naturalWidth, image.naturalHeight);
           ctx.filter = "none";
+
+          // Apply additional per-pixel adjustments that canvas filter doesn't support
+          if (
+            adjustments.temperature !== 0 ||
+            adjustments.highlights !== 0 ||
+            adjustments.shadows !== 0 ||
+            adjustments.sharpness !== 0 ||
+            adjustments.vignette !== 0 ||
+            adjustments.grain !== 0 ||
+            adjustments.clarity !== 0
+          ) {
+            try {
+              const w = image.naturalWidth;
+              const h = image.naturalHeight;
+              const imageData = ctx.getImageData(0, 0, w, h);
+              const data = imageData.data;
+
+              // Temperature adjustment (warm/cool)
+              if (adjustments.temperature !== 0) {
+                const factor = adjustments.temperature / 100;
+                for (let i = 0; i < data.length; i += 4) {
+                  if (factor > 0) {
+                    data[i] = Math.min(255, data[i] * (1 + factor * 0.3));
+                    data[i + 2] = Math.max(0, data[i + 2] * (1 - factor * 0.3));
+                  } else {
+                    data[i] = Math.max(0, data[i] * (1 + factor * 0.3));
+                    data[i + 2] = Math.min(255, data[i + 2] * (1 - factor * 0.3));
+                  }
+                }
+              }
+
+              // Highlights & Shadows adjustment
+              if (adjustments.highlights !== 0 || adjustments.shadows !== 0) {
+                for (let i = 0; i < data.length; i += 4) {
+                  const luminance = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+
+                  if (luminance > 128 && adjustments.highlights !== 0) {
+                    const highlightMask = (luminance - 128) / 127;
+                    const highlightFactor = 1 + (adjustments.highlights / 100) * highlightMask;
+                    data[i] = Math.min(255, data[i] * highlightFactor);
+                    data[i + 1] = Math.min(255, data[i + 1] * highlightFactor);
+                    data[i + 2] = Math.min(255, data[i + 2] * highlightFactor);
+                  }
+
+                  if (luminance < 128 && adjustments.shadows !== 0) {
+                    const shadowMask = 1 - (luminance / 128);
+                    const shadowLift = (adjustments.shadows / 100) * shadowMask * 40;
+                    data[i] = Math.min(255, data[i] + shadowLift);
+                    data[i + 1] = Math.min(255, data[i + 1] + shadowLift);
+                    data[i + 2] = Math.min(255, data[i + 2] + shadowLift);
+                  }
+                }
+              }
+
+              // Vignette
+              if (adjustments.vignette > 0) {
+                const centerX = image.naturalWidth / 2;
+                const centerY = image.naturalHeight / 2;
+                const maxDist = Math.sqrt(centerX * centerX + centerY * centerY);
+                const strength = adjustments.vignette / 100;
+                for (let y = 0; y < image.naturalHeight; y++) {
+                  for (let x = 0; x < image.naturalWidth; x++) {
+                    const dx = x - centerX;
+                    const dy = y - centerY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const vignette = 1 - (dist / maxDist) * strength;
+                    const idx = (y * image.naturalWidth + x) * 4;
+                    data[idx] = data[idx] * vignette;
+                    data[idx + 1] = data[idx + 1] * vignette;
+                    data[idx + 2] = data[idx + 2] * vignette;
+                  }
+                }
+              }
+
+              // Grain
+              if (adjustments.grain > 0) {
+                const grainStrength = (adjustments.grain / 100) * 25;
+                for (let i = 0; i < data.length; i += 4) {
+                  const noise = (Math.random() - 0.5) * grainStrength;
+                  data[i] = Math.max(0, Math.min(255, data[i] + noise));
+                  data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise));
+                  data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise));
+                }
+              }
+
+              // Put back
+              ctx.putImageData(imageData, 0, 0);
+            } catch (err) {
+              console.debug('per-pixel adjustments failed', err);
+            }
+          }
 
           // Helper function to apply watermark style to canvas
           const applyWatermarkStyle = (
@@ -2092,13 +2212,19 @@ export default function Editor() {
               let logoX = (logo.position.x / 100) * image.naturalWidth;
               let logoY = (logo.position.y / 100) * image.naturalHeight;
               // Respect an edge margin so logos don't sit flush to the image edge
-              const edgeMargin = (watermark as any).edgeMargin ?? Math.max(12, watermark.bgPadding ?? 12);
-              const minLogoX = logoWidth / 2 + edgeMargin;
-              const maxLogoX = Math.max(minLogoX, image.naturalWidth - logoWidth / 2 - edgeMargin);
-              const minLogoY = logoHeight / 2 + edgeMargin;
-              const maxLogoY = Math.max(minLogoY, image.naturalHeight - logoHeight / 2 - edgeMargin);
-              logoX = Math.max(minLogoX, Math.min(maxLogoX, logoX));
-              logoY = Math.max(minLogoY, Math.min(maxLogoY, logoY));
+              const edgeMargin = Math.max(8, (watermark as any).edgeMargin ?? 12);
+              const minLogoX = Math.max(logoWidth / 2 + edgeMargin, 0);
+              const maxLogoX = Math.min(image.naturalWidth - logoWidth / 2 - edgeMargin, image.naturalWidth);
+              const minLogoY = Math.max(logoHeight / 2 + edgeMargin, 0);
+              const maxLogoY = Math.min(image.naturalHeight - logoHeight / 2 - edgeMargin, image.naturalHeight);
+
+              // Only clamp if outside valid range
+              if (logoX < minLogoX || logoX > maxLogoX) {
+                logoX = Math.max(minLogoX, Math.min(maxLogoX, logoX));
+              }
+              if (logoY < minLogoY || logoY > maxLogoY) {
+                logoY = Math.max(minLogoY, Math.min(maxLogoY, logoY));
+              }
 
               ctx.save();
               ctx.globalAlpha = logo.opacity / 100;
@@ -2520,7 +2646,11 @@ export default function Editor() {
                           key={logo.id}
                           onMouseDown={(e) => {
                             e.preventDefault();
-                            handleLogoDrag(e, logo.id);
+                            handleLogoDrag(e as any, logo.id);
+                          }}
+                          onTouchStart={(e) => {
+                            e.preventDefault();
+                            handleLogoDrag(e as any, logo.id);
                           }}
                           className={`absolute transition-shadow ${
                             logo.locked ? "cursor-not-allowed" : "cursor-move"
@@ -2539,6 +2669,7 @@ export default function Editor() {
                             transform: `translate(-50%, -50%) rotate(${logo.rotation}deg)`,
                             opacity: logo.opacity / 100,
                             width: `${logo.size}px`,
+                            touchAction: 'none'
                           }}
                         >
                           <img
@@ -3136,6 +3267,50 @@ export default function Editor() {
                       </div>
                     </div>
 
+                    {/* ✅ ADD: Manual X/Y Position Controls for Text Watermark */}
+                    <div className="space-y-3 pt-3 border-t border-white/10">
+                      <h5 className="text-xs font-medium text-slate-400 uppercase">Fine Position Control</h5>
+
+                      <Slider
+                        label="Horizontal (X)"
+                        value={Math.round(watermark.position.x)}
+                        onChange={(v) => setWatermark({ ...watermark, position: { ...watermark.position, x: v } })}
+                        min={0}
+                        max={100}
+                        icon={Move}
+                      />
+
+                      <Slider
+                        label="Vertical (Y)"
+                        value={Math.round(watermark.position.y)}
+                        onChange={(v) => setWatermark({ ...watermark, position: { ...watermark.position, y: v } })}
+                        min={0}
+                        max={100}
+                        icon={Move}
+                      />
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setWatermark({ ...watermark, position: { x: 50, y: 50 } })}
+                          className="flex-1 px-3 py-2 rounded-lg bg-white/5 text-white text-xs hover:bg-white/10 transition-colors"
+                        >
+                          Center
+                        </button>
+                        <button
+                          onClick={() => setWatermark({ ...watermark, position: { x: 10, y: 10 } })}
+                          className="flex-1 px-3 py-2 rounded-lg bg-white/5 text-white text-xs hover:bg-white/10 transition-colors"
+                        >
+                          Top Left
+                        </button>
+                        <button
+                          onClick={() => setWatermark({ ...watermark, position: { x: 90, y: 90 } })}
+                          className="flex-1 px-3 py-2 rounded-lg bg-white/5 text-white text-xs hover:bg-white/10 transition-colors"
+                        >
+                          Bottom Right
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Logos Section */}
                     <div className="space-y-3 pt-4 border-t border-white/10">
                       <div className="flex items-center justify-between">
@@ -3276,6 +3451,56 @@ export default function Editor() {
                               max={180}
                               icon={RotateCw}
                             />
+
+                            {/* ✅ ADD: Manual X/Y Position Controls */}
+                            <div className="space-y-3 pt-3 border-t border-white/10">
+                              <h5 className="text-xs font-medium text-slate-400 uppercase">Fine Position Control</h5>
+                              
+                              <Slider
+                                label="Horizontal (X)"
+                                value={Math.round(logos.find((l) => l.id === selectedLogo)!.position.x)}
+                                onChange={(v) => updateLogo(selectedLogo, { position: { 
+                                  ...logos.find((l) => l.id === selectedLogo)!.position,
+                                  x: v 
+                                }})}
+                                min={0}
+                                max={100}
+                                icon={Move}
+                              />
+                              
+                              <Slider
+                                label="Vertical (Y)"
+                                value={Math.round(logos.find((l) => l.id === selectedLogo)!.position.y)}
+                                onChange={(v) => updateLogo(selectedLogo, { position: { 
+                                  ...logos.find((l) => l.id === selectedLogo)!.position,
+                                  y: v 
+                                }})}
+                                min={0}
+                                max={100}
+                                icon={Move}
+                              />
+                              
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => updateLogo(selectedLogo, { position: { x: 50, y: 50 }})}
+                                  className="flex-1 px-3 py-2 rounded-lg bg-white/5 text-white text-xs hover:bg-white/10 transition-colors"
+                                >
+                                  Center
+                                </button>
+                                <button
+                                  onClick={() => updateLogo(selectedLogo, { position: { x: 10, y: 10 }})}
+                                  className="flex-1 px-3 py-2 rounded-lg bg-white/5 text-white text-xs hover:bg-white/10 transition-colors"
+                                >
+                                  Top Left
+                                </button>
+                                <button
+                                  onClick={() => updateLogo(selectedLogo, { position: { x: 90, y: 90 }})}
+                                  className="flex-1 px-3 py-2 rounded-lg bg-white/5 text-white text-xs hover:bg-white/10 transition-colors"
+                                >
+                                  Bottom Right
+                                </button>
+                              </div>
+                            </div>
 
                             {/* Quick Position Grid */}
                             <div className="space-y-2">
